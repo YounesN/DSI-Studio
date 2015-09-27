@@ -1,3 +1,14 @@
+This project is originally came from here:
+https://github.com/frankeyh/DSI-Studio
+
+Due to amount of changed I already made, Unfortunately I didn't fork it.
+Here is the read me for original repository.
+I have to add that along the following library you need to download IT++ library and compile it.
+Instructions for compiling IT++ for windows is available in here:
+http://nejahi.com/1/post/2015/09/compiling-it-with-visual-studio-express-2013-and-cmake-322.html
+
+Original Readme.txt:
+
 Qt Creator is needed to edit the GUI.
 
 The following libraries are also needed to build DSI Studio
