@@ -1,5 +1,5 @@
 This project is originally came from here:
-https://github.com/frankeyh/DSI-Studio
+https://github.com/frankyeh/DSI-Studio
 
 Due to amount of changed I already made, Unfortunately I didn't fork it.
 Here is the read me for original repository.
