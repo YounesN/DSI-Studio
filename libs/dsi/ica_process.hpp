@@ -5,6 +5,9 @@
 #include "image/image.hpp"
 #include "itpp/itsignal.h"
 #include "itbase.h"
+#include <qdebug>
+#include <iostream>
+using namespace std;
 
 using namespace itpp;
 
@@ -16,9 +19,7 @@ private:
     double a1, a2, mu, epsilon, sampleSize;
     int maxNumIterations, maxFineTune;
     int firstEig, lastEig;
-    //mat initGuess;
     mat mixedSig, icasig;
-    //mat originalMixedSig;
     mat mixing_matrix;
     std::vector<float> d0;
     std::vector<float> d1;
@@ -71,7 +72,7 @@ public:
         initState = FICA_INIT_RAND;
         finetune = false;
         stabilization = false;
-        PCAonly = false; // ?
+        PCAonly = false;
         a1 = 1;
         a2 = 1;
         mu = 1;
@@ -81,12 +82,8 @@ public:
         maxFineTune = 5;
         firstEig = 1;
         lastEig = 3;
-        mixedSig.set_size(9, 64);
+        mixedSig.set_size(9, 65);
         mixedSig.zeros();
-        icasig.set_size(3, 64);
-        icasig.zeros();
-        mixing_matrix.set_size(9, numOfIC);
-        mixing_matrix.zeros();
         voxel.fr.clear();
         voxel.fr.resize(numOfIC* voxel.dim.size());
         voxel.fib_fa.clear();
@@ -132,7 +129,7 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        unsigned int i=0,j=0,k=0,ii=0;
+        unsigned int i=0,j=0,k=0,m=0,n=0;
         /* get 3d position */
         unsigned int index = data.voxel_index;
         k = (unsigned int) index / (voxel.dim.h * voxel.dim.w);
@@ -186,52 +183,64 @@ public:
         fi.set_last_eig(lastEig);
         fi.set_pca_only(PCAonly);
 
-        fi.separate();
+        try{
+            fi.separate();
+        }
+        catch(...)
+        {
+            qDebug() << "Exception!!!.";
+        }
+
         icasig = fi.get_independent_components();
         mixing_matrix = fi.get_mixing_matrix();
 
-        for(ii = 0; ii < numOfIC; ii++)
+        for(m = 0; m < icasig.rows(); m++)
         {
             double sum = 0;
-            int jj;
-            double min_value = icasig.get(ii, 0);
-            double max_value = icasig.get(ii, 0);
-            for(jj=0;jj<icasig.cols();jj++)
+            double min_value = icasig.get(m, 0);
+            double max_value = icasig.get(m, 0);
+            for(n=0;n<icasig.cols();n++)
             {
-                sum+=icasig.get(ii,jj);
-                if(icasig.get(ii,jj)>max_value)
-                    max_value = icasig(ii, jj);
-                if(icasig.get(ii,jj)<min_value)
-                    min_value = icasig(ii,jj);
+                sum+=icasig.get(m,n);
+                if(icasig.get(m,n)>max_value)
+                    max_value = icasig.get(m, n);
+                if(icasig.get(m,n)<min_value)
+                    min_value = icasig.get(m,n);
             }
             if(sum<0)
             {
-                for(jj=0;jj<icasig.cols();jj++)
-                    icasig.set(ii, jj, icasig.get(ii,jj)*-1);
-                for(jj=0;jj<mixing_matrix.rows();jj++)
-                    mixing_matrix.set(jj, ii, mixing_matrix.get(jj, ii)*-1);
+                for(n=0;n<icasig.cols();n++)
+                    icasig.set(m, n, icasig.get(m,n)*-1);
+                for(n=0;n<mixing_matrix.rows();n++)
+                    mixing_matrix.set(n, m, mixing_matrix.get(n, m)*-1);
             }
-            for(jj=0;jj<icasig.cols();jj++)
+            for(n=0;n<icasig.cols();n++)
             {
-                icasig.set(ii,jj, ((icasig.get(ii,jj)-min_value)/(max_value-min_value))*0.8+1);
-                icasig.set(ii,jj, std::max<float>(0.0, std::log(std::max<float>(1.0, icasig.get(ii,jj)))));
+                double tmp = icasig.get(m, n);
+                double t = tmp - min_value;
+                double b = max_value - min_value;
+                double f = (t/b)*0.8+1;
+                icasig.set(m,n, f);
+                icasig.set(m,n, std::max<float>(0.0, std::log(std::max<float>(1.0, icasig.get(m,n)))));
             }
         }
 
         double KtS[6], tensor_param[6];
         double tensor[9];
         double V[9],d[3];
-        std::vector<float>signal(icasig.cols());
-        std::vector<float> w(numOfIC);
+        std::vector<float> signal(icasig.cols());
+        std::vector<float> w(icasig.rows());
 
-        for(i=0; i<numOfIC; i++)
+        for(m=0; m<icasig.rows(); m++)
         {
-            get_mat_row(icasig, signal, i);
+            get_mat_row(icasig, signal, m);
+
             image::matrix::product(Kt.begin(),signal.begin(),KtS,image::dyndim(6,b_count),image::dyndim(b_count,1));
             image::matrix::lu_solve(iKtK.begin(),iKtK_pivot.begin(),KtS,tensor_param,image::dyndim(6,6));
             unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
             for (unsigned int index = 0; index < 9; ++index)
                 tensor[index] = tensor_param[tensor_index[index]];
+
             image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
             if (d[1] < 0.0)
             {
@@ -246,15 +255,16 @@ public:
                 d[1] = 0.0;
                 d[2] = 0.0;
             }
-            std::copy(V,V+3,i*voxel.dim.size()*3 + voxel.fib_dir.begin() + data.voxel_index + data.voxel_index + data.voxel_index);
+
+            std::copy(V, V+3, voxel.fib_dir.begin() + m*voxel.dim.size() * 3 + data.voxel_index * 3);
         }
         get_mat_row(mixing_matrix, w, 4);
         float sum = 0;
-        for(i=0; i<numOfIC; i++)
-            sum += abs(w[i]);
-        voxel.fr[data.voxel_index]=abs(w[0])/sum;
-        voxel.fr[voxel.dim.size()+data.voxel_index]=abs(w[1])/sum;
-        voxel.fr[2*voxel.dim.size()+data.voxel_index]=abs(w[2])/sum;
+        for(m=0; m<icasig.rows(); m++)
+            sum += abs(w[m]);
+
+        for(m=0; m<icasig.rows(); m++)
+            voxel.fr[m*voxel.dim.size()+data.voxel_index] = abs(w[m])/sum;
 
         if (data.space.front() != 0.0)
         {
