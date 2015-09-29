@@ -37,6 +37,7 @@ typedef boost::mpl::vector<
 > ica_preprocess;
 
 typedef boost::mpl::vector<
+    ReadDWIData,
     ICABSM
 > ica_process;
 
@@ -241,7 +242,7 @@ const char* reconstruction(ImageModel* image_model,
         image_model->voxel.recon_report.str("");
         image_model->voxel.param = param_values;
         std::ostringstream out;
-        if(method_id == 1) // DTI
+        if(method_id == 1 || method_id == 8) // DTI
         {
             image_model->voxel.need_odf = 0;
             image_model->voxel.output_jacobian = 0;
@@ -431,26 +432,13 @@ const char* reconstruction(ImageModel* image_model,
         case 8:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
             out << ".ica.fib.gz";
-            image_model->voxel.max_fiber_number = 1;
+            image_model->voxel.max_fiber_number = 3;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
             if (!image_model->reconstruct<ica_process>(thread_count))
                 return "reconstruction canceled";
             break;
         }
-
-        /*int ii, jj;
-        std::ofstream out1;
-        out1.open("output.txt");
-        for(ii = 0; ii < image_model->voxel.signalData.size(); ii ++)
-        {
-            for(jj = 0; jj < image_model->voxel.signalData[ii].size(); jj++)
-            {
-                out1 << image_model->voxel.signalData[ii][jj] << " ";
-            }
-            out1 << std::endl;
-        }
-        out1.close();*/
 
         image_model->save_fib(out.str());
         output_name = image_model->file_name + out.str();

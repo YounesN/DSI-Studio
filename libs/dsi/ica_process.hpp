@@ -7,9 +7,9 @@
 #include "itbase.h"
 #include <qdebug>
 #include <iostream>
-using namespace std;
+#include "armadillo"
 
-using namespace itpp;
+using namespace std;
 
 class ICABSM : public BaseProcess
 {
@@ -19,14 +19,11 @@ private:
     double a1, a2, mu, epsilon, sampleSize;
     int maxNumIterations, maxFineTune;
     int firstEig, lastEig;
-    mat mixedSig, icasig;
-    mat mixing_matrix;
+    itpp::mat mixedSig, icasig;
+    itpp::mat mixing_matrix;
     std::vector<float> d0;
     std::vector<float> d1;
     std::vector<float> md;
-    std::vector<double> iKtK; // 6-by-6
-    std::vector<unsigned int> iKtK_pivot;
-    std::vector<double> Kt;
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
     {
@@ -36,10 +33,10 @@ private:
         float ll1 = l1 - ll;
         float ll2 = l2 - ll;
         float ll3 = l3 - ll;
-        return std::min(1.0, std::sqrt(1.5*(ll1*ll2+ll2*ll2+ll3*ll3)/(l1*l1+l2*l2+l3*l3)));
+        return std::min(1.0,std::sqrt(1.5*(ll1*ll1+ll2*ll2+ll3*ll3)/(l1*l1+l2*l2+l3*l3)));
     }
 
-    void set_mat_row(mat &m, std::vector<float>& v, int r)
+    void set_mat_row(itpp::mat &m, std::vector<float>& v, int r)
     {
         int i;
         int size = v.size();
@@ -47,7 +44,7 @@ private:
             m.set(r, i, v[i]);
     }
 
-    void get_mat_row(mat &m, std::vector<float>& v, int r)
+    void get_mat_row(itpp::mat &m, std::vector<float>& v, int r)
     {
         int i;
         int size = m.cols();
@@ -55,10 +52,18 @@ private:
         for(i = 0; i< size; i++)
             v[i] = m.get(r, i);
     }
+    void set_arma_col(arma::mat &m, std::vector<float> v, int r)
+    {
+        int i;
+        int size = v.size();
+        for(i=0; i<size; i++)
+            m(i,r) = v[i];
+    }
 
 public:
     virtual void init(Voxel& voxel)
     {
+        int m,n;
         md.clear();
         md.resize(voxel.dim.size());
         d0.clear();
@@ -82,7 +87,7 @@ public:
         maxFineTune = 5;
         firstEig = 1;
         lastEig = 3;
-        mixedSig.set_size(9, 65);
+        mixedSig.set_size(9, 64);
         mixedSig.zeros();
         voxel.fr.clear();
         voxel.fr.resize(numOfIC* voxel.dim.size());
@@ -92,39 +97,32 @@ public:
         voxel.fib_dir.resize(voxel.dim.size()*3*numOfIC);
 
         b_count = voxel.bvalues.size()-1;
-        std::vector<image::vector<3> > b_data(b_count);
-        //skip null
-        std::copy(voxel.bvectors.begin()+1,voxel.bvectors.end(),b_data.begin());
-        for(unsigned int index = 0; index < b_count; ++index)
-            b_data[index] *= std::sqrt(voxel.bvalues[index+1]);
+        voxel.g_dg.clear();
+        voxel.g_dg.resize(6*b_count);
+        voxel.invg_dg.clear();
+        voxel.invg_dg.resize(6*b_count);
+        voxel.matg_dg.set_size(b_count, 6);
 
-        Kt.resize(6*b_count);
+        for(m=0; m<b_count; m++)
         {
-            unsigned int qmap[6]		= {0  ,4  ,8  ,1  ,2  ,5  };
-            double qweighting[6]= {1.0,1.0,1.0,2.0,2.0,2.0};
-            //					  bxx,byy,bzz,bxy,bxz,byz
-            for (unsigned int i = 0,k = 0; i < b_data.size(); ++i,k+=6)
-            {
-                //qq = q qT
-                std::vector<float> qq(3*3);
-                image::matrix::product_transpose(b_data[i].begin(),b_data[i].begin(),qq.begin(),
-                                               image::dyndim(3,1),image::dyndim(3,1));
-
-                /*
-                      q11 q15 q19 2*q12 2*q13 2*q16
-                      q21 q25 q29 2*q22 2*q23 2*q26
-                K  = | ...                         |
-                */
-                for (unsigned int col = 0,index = i; col < 6; ++col,index+=b_count)
-                    Kt[index] = qq[qmap[col]]*qweighting[col];
-            }
+            voxel.matg_dg(m,0) = voxel.g_dg[6*m+0] = voxel.bvectors[m+1][0]*voxel.bvectors[m+1][0];
+            voxel.matg_dg(m,1) = voxel.g_dg[6*m+1] = voxel.bvectors[m+1][1]*voxel.bvectors[m+1][1];
+            voxel.matg_dg(m,2) = voxel.g_dg[6*m+2] = voxel.bvectors[m+1][2]*voxel.bvectors[m+1][2];
+            voxel.matg_dg(m,3) = voxel.g_dg[6*m+3] = voxel.bvectors[m+1][0]*voxel.bvectors[m+1][1]*2;
+            voxel.matg_dg(m,4) = voxel.g_dg[6*m+4] = voxel.bvectors[m+1][0]*voxel.bvectors[m+1][2]*2;
+            voxel.matg_dg(m,5) = voxel.g_dg[6*m+5] = voxel.bvectors[m+1][1]*voxel.bvectors[m+1][2]*2;
         }
-        iKtK.resize(6*6);
-        iKtK_pivot.resize(6);
-        image::matrix::product_transpose(Kt.begin(),Kt.begin(),iKtK.begin(),
-                                       image::dyndim(6,b_count),image::dyndim(6,b_count));
-        image::matrix::lu_decomposition(iKtK.begin(),iKtK_pivot.begin(),image::dyndim(6,6));
-
+        arma::mat ones;
+        ones.ones(1,6);
+        arma::mat bvalue(64,1);
+        for(m=0; m<b_count; m++)
+            bvalue(m, 0) = voxel.bvalues[m+1];
+        bvalue = bvalue * ones;
+        for(m=0;m<b_count;m++)
+            for(n=0;n<6;n++)
+                voxel.matg_dg(m,n)*=bvalue(m,n);
+        voxel.matinvg_dg = arma::pinv(voxel.matg_dg);
+        voxel.matinvg_dg = -voxel.matinvg_dg;
     }
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
@@ -166,7 +164,7 @@ public:
         if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 8);
 
-        Fast_ICA fi(mixedSig);
+        itpp::Fast_ICA fi(mixedSig);
         fi.set_approach(approach);
         fi.set_nrof_independent_components(numOfIC);
         fi.set_non_linearity(g);
@@ -225,7 +223,7 @@ public:
             }
         }
 
-        double KtS[6], tensor_param[6];
+        arma::mat tensor_param(6,1);
         double tensor[9];
         double V[9],d[3];
         std::vector<float> signal(icasig.cols());
@@ -234,12 +232,13 @@ public:
         for(m=0; m<icasig.rows(); m++)
         {
             get_mat_row(icasig, signal, m);
+            arma::mat matsignal(icasig.cols(),1);
+            set_arma_col(matsignal, signal, 0);
+            tensor_param = voxel.matinvg_dg * matsignal;
 
-            image::matrix::product(Kt.begin(),signal.begin(),KtS,image::dyndim(6,b_count),image::dyndim(b_count,1));
-            image::matrix::lu_solve(iKtK.begin(),iKtK_pivot.begin(),KtS,tensor_param,image::dyndim(6,6));
             unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
-            for (unsigned int index = 0; index < 9; ++index)
-                tensor[index] = tensor_param[tensor_index[index]];
+            for(unsigned int index = 0; index < 9; index++)
+                tensor[index] = tensor_param(tensor_index[index],0);
 
             image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
             if (d[1] < 0.0)
@@ -273,14 +272,14 @@ public:
                 signal[i-1] = std::max<float>(0.0,logs0-std::log(std::max<float>(1.0,data.space[i])));
         }
 
-        image::matrix::product(Kt.begin(),signal.begin(),KtS,image::dyndim(6,b_count),image::dyndim(b_count,1));
-        image::matrix::lu_solve(iKtK.begin(),iKtK_pivot.begin(),KtS,tensor_param,image::dyndim(6,6));
-
+        arma::mat matsignal(icasig.cols(),1);
+        set_arma_col(matsignal, signal, 0);
+        arma::mat pos_invg_dg = -voxel.matinvg_dg;
+        tensor_param = pos_invg_dg * matsignal;
 
         unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
-        for (unsigned int index = 0; index < 9; ++index)
-            tensor[index] = tensor_param[tensor_index[index]];
-
+        for(unsigned int index = 0; index < 9; index++)
+            tensor[index] = tensor_param(tensor_index[index],0);
         image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
         if (d[1] < 0.0)
         {
@@ -295,7 +294,7 @@ public:
             d[1] = 0.0;
             d[2] = 0.0;
         }
-        data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0],d[1],d[2]);
+        data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
         md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
@@ -308,6 +307,13 @@ public:
         mat_writer.write("fa0",&*voxel.fr.begin(), 1, voxel.fr.size()/3);
         mat_writer.write("fa1",&*voxel.fr.begin()+voxel.dim.size(), 1, voxel.fr.size()/3);
         mat_writer.write("fa2",&*voxel.fr.begin()+2*voxel.dim.size(), 1, voxel.fr.size()/3);
+
+        ofstream out;
+        out.open("out.txt", ios::app);
+        for(int i=0;i<voxel.fib_fa.size(); i++)
+            out << voxel.fib_fa[i] << std::endl;
+        out.close();
+
         mat_writer.write("gfa",&*voxel.fib_fa.begin(), 1, voxel.fib_fa.size());
         mat_writer.write("adc",&*md.begin(),1,md.size());
         mat_writer.write("axial_dif",&*d0.begin(),1,d0.size());

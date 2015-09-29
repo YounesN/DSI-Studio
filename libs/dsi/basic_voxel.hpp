@@ -10,6 +10,8 @@
 #include "tessellated_icosahedron.hpp"
 #include "gzip_interface.hpp"
 #include "prog_interface_static_link.h"
+#include "armadillo"
+
 struct ImageModel;
 struct VoxelParam;
 class Voxel;
@@ -92,6 +94,11 @@ public: // user in fib evaluation
     std::vector<float> fib_fa;
     std::vector<float> fib_dir;
     std::vector<float> fr;
+public: // gradient and B tables
+    std::vector<float> g_dg;
+    arma::mat matg_dg;
+    std::vector<float> invg_dg;
+    arma::mat matinvg_dg;
 public:
     float z0;
     // other information for second pass processing

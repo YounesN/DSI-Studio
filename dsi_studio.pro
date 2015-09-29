@@ -167,6 +167,7 @@ SOURCES += main.cpp \
 OTHER_FILES += \
     options.txt
 
+# IT++ library
 win32: LIBS += -L$$PWD/itpp/lib/ -litpp_debug_win32
 
 INCLUDEPATH += $$PWD/itpp
@@ -174,3 +175,29 @@ DEPENDPATH += $$PWD/itpp
 
 win32:!win32-g++: PRE_TARGETDEPS += $$PWD/itpp/lib/itpp_debug_win32.lib
 else:win32-g++: PRE_TARGETDEPS += $$PWD/itpp/lib/libitpp_debug_win32.a
+
+# LAPACK library
+
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/itpp/lib/ -llapack_win32_MT
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/itpp/lib/ -llapack_win32_MTd
+
+INCLUDEPATH += $$PWD/itpp
+DEPENDPATH += $$PWD/itpp
+
+win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/liblapack_win32_MT.a
+else:win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/liblapack_win32_MTd.a
+else:win32:!win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/lapack_win32_MT.lib
+else:win32:!win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/lapack_win32_MTd.lib
+
+# BLAS library
+
+win32:CONFIG(release, debug|release): LIBS += -L$$PWD/itpp/lib/ -lblas_win32_MT
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/itpp/lib/ -lblas_win32_MTd
+
+INCLUDEPATH += $$PWD/itpp
+DEPENDPATH += $$PWD/itpp
+
+win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/libblas_win32_MT.a
+else:win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/libblas_win32_MTd.a
+else:win32:!win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/blas_win32_MT.lib
+else:win32:!win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/blas_win32_MTd.lib

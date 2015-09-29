@@ -13,7 +13,7 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        std::vector<float> signal(data.space.size());
+        std::vector<float> signal(data.space.size()-1);
         if (data.space.front() != 0.0)
         {
             for (unsigned int i = 1; i < data.space.size(); ++i)
