@@ -1,10 +1,9 @@
-This project is originally came from here:
-https://github.com/frankyeh/DSI-Studio
+Along the following library you need to download IT++ library and compile it.
 
-Due to amount of changed I already made, Unfortunately I didn't fork it.
-I have to add that along the following library you need to download IT++ library and compile it.
 Instructions for compiling IT++ for windows is available in here:
+
 http://nejahi.com/1/post/2015/09/compiling-it-with-visual-studio-express-2013-and-cmake-322.html
+
 
 Qt Creator is needed to edit the GUI.
 
@@ -24,5 +23,7 @@ The .pro files has to be edited to match the file system. Other required data to
 
 3. download FA template (required for runtime)
 
-visit dsi-studio.labsolver.org
-download any dsi studio package. The fa template is included.
+
+4. download armadillo library.
+
+http://arma.sourceforge.net/
