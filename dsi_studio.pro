@@ -101,7 +101,8 @@ HEADERS += mainwindow.h \
     tracking/atlasdialog.h \
     dicom/motion_dialog.hpp \
     libs/dsi/ica_process.hpp \
-    libs/dsi/sig_process.hpp
+    libs/dsi/sig_process.hpp \
+    libs/dsi/icabsm_process.hpp
 
 FORMS += mainwindow.ui \
     tracking/tracking_window.ui \
@@ -201,3 +202,14 @@ win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/libbl
 else:win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/libblas_win32_MTd.a
 else:win32:!win32-g++:CONFIG(release, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/blas_win32_MT.lib
 else:win32:!win32-g++:CONFIG(debug, debug|release): PRE_TARGETDEPS += $$PWD/itpp/lib/blas_win32_MTd.lib
+
+
+# LEVMAR library
+
+win32: LIBS += -L$$PWD/levmar/lib/ -llevmar
+
+INCLUDEPATH += $$PWD/levmar
+DEPENDPATH += $$PWD/levmar
+
+win32:!win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/levmar.lib
+else:win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/liblevmar.a

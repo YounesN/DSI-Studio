@@ -1,9 +1,10 @@
-#ifndef ICA_PROCESS_HPP
-#define ICA_PROCESS_HPP
+#ifndef ICABSM_PROCESS_HPP
+#define ICABSM_PROCESS_HPP
 #include <cmath>
 #include "basic_voxel.hpp"
 #include "image/image.hpp"
 #include "itpp/itsignal.h"
+#include "levmar/levmar.h"
 #include "itbase.h"
 #include <qdebug>
 #include <iostream>
@@ -11,7 +12,15 @@
 
 using namespace std;
 
-class ICA : public BaseProcess
+struct ad {
+    int n;
+    Voxel *voxel;
+    float *x;
+};
+
+void cost_function(float *p, float *hx, int m, int n, void *adata);
+
+class ICABSM : public BaseProcess
 {
 private:
     int approach, numOfIC, g, initState;
@@ -24,6 +33,22 @@ private:
     std::vector<float> d0;
     std::vector<float> d1;
     std::vector<float> md;
+
+    // BSM variables
+    float par[14];
+    float p_min0[1];
+    float p_max0[1];
+    float p_min1[6];
+    float p_max1[6];
+    float p_min2[10];
+    float p_max2[10];
+    float p_min3[14];
+    float p_max3[14];
+    float fractions[4];
+    float lambda;
+    float eigenvectors[9];
+    float info[LM_INFO_SZ];
+
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
     {
@@ -59,6 +84,14 @@ private:
         for(i=0; i<size; i++)
             m(i,r) = v[i];
     }
+    float error_value(float *x, float *xstar, int size)
+    {
+        int i=0;
+        float ret = 0.0f;
+        for(i=0; i<size; i++)
+            ret += (x[i]-xstar[i])*(x[i]-xstar[i]);
+        return ret;
+    }
 
 public:
     virtual void init(Voxel& voxel)
@@ -70,6 +103,19 @@ public:
         d0.resize(voxel.dim.size());
         d1.clear();
         d1.resize(voxel.dim.size());
+
+        p_min0[0] = 0.0010f;
+        p_max0[0] = 0.0020f;
+        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f; p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = 0.0010f;
+        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f; p_max1; p_max1[3] = 1.0f; p_max1[4] = 1.0f; p_max1[5] = 0.0020f;
+        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f; p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f;
+        p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = 0.0010f;
+        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f; p_max2[3] = 1.0f; p_max2[4] = 1.0f; p_max2[5] = 1.0f; p_max2[6] = 1.0f;
+        p_max2[7] = 1.0f; p_max2[8] = 1.0f; p_max2[9] = 0.0020f;
+        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f; p_min3[3] = 0.05f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f;
+        p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = 0.0010f;
+        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f; p_max3[3] = 0.95f; p_max3[4] = 1.0f; p_max3[5] = 1.0f; p_max3[6] = 1.0f;
+        p_max3[7] = 1.0f; p_max3[8] = 1.0f; p_max3[9] = 1.0f; p_max3[10] = 1.0f; p_max3[11] = 1.0f; p_max3[12] = 1.0f; p_max3[13] = 0.0020f;
 
         approach = FICA_APPROACH_SYMM;
         numOfIC = 3;
@@ -87,6 +133,9 @@ public:
         maxFineTune = 5;
         firstEig = 1;
         lastEig = 3;
+
+        lambda = 0.0015f;
+
         mixedSig.set_size(9, 64);
         mixedSig.zeros();
         voxel.fr.clear();
@@ -127,6 +176,7 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        // ICA
         unsigned int i=0,j=0,k=0,m=0,n=0;
         /* get 3d position */
         unsigned int index = data.voxel_index;
@@ -254,8 +304,10 @@ public:
                 d[1] = 0.0;
                 d[2] = 0.0;
             }
-
             std::copy(V, V+3, voxel.fib_dir.begin() + m*voxel.dim.size() * 3 + data.voxel_index * 3);
+            eigenvectors[m * 3 + 0] = V[0]; // we need this for BSM
+            eigenvectors[m * 3 + 1] = V[1];
+            eigenvectors[m * 3 + 2] = V[2];
         }
         get_mat_row(mixing_matrix, w, 4);
         float sum = 0;
@@ -263,8 +315,130 @@ public:
             sum += abs(w[m]);
 
         for(m=0; m<icasig.rows(); m++)
-            voxel.fr[m*voxel.dim.size()+data.voxel_index] = abs(w[m])/sum;
+        {
+            fractions[m+1] = abs(w[m])/sum;
+            voxel.fr[m*voxel.dim.size()+data.voxel_index] = fractions[m+1];
+        }
 
+        // BSM
+        ad mydata;
+        mydata.voxel = &voxel;
+        mydata.n = icasig.rows();
+        float opts[LM_OPTS_SZ];
+        opts[0] = LM_INIT_MU;
+        opts[1] = opts[2] = 1E-8;
+        opts[3] = 1E-3;
+        opts[4] = 1E-8;
+        int b_count = voxel.bvalues.size()-1;
+        float *x = new float[b_count];
+        float *xstar = new float[b_count];
+        for(m=0; m<b_count; m++)
+        {
+            x[m] = mixedSig(4,m);
+            xstar[m] = mixedSig(4,m);
+        }
+        float e=0;
+        mydata.x = x;
+
+        ofstream out;
+        out.open("output.txt", ios::app);
+        out << "===============================================================================" << std::endl;
+        out << "Voxel :" << i << "x" << j << "x" << k << std::endl;
+        out << "Parameters before BSM: " << std::endl;
+        int result;
+
+        switch(icasig.rows())
+        {
+        case 0: // zero sticks
+            par[0] = lambda;
+            out << par[0] << std::endl;
+            result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+            out << "Parameters after BSM: " << std::endl;
+            out << par[0] << std::endl;
+            e = error_value(x, xstar, b_count);
+
+            break;
+        case 1: // one stick
+            fractions[1] *= 0.8;
+            fractions[0] = 1-fractions[1];
+            par[0] = fractions[0];
+            par[1] = fractions[1];
+            for(m=0; m<3; m++)
+                par[m+2] = eigenvectors[m];
+            par[5] = lambda;
+            for(m=0; m<6; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+            out << "Parameters after BSM: " << std::endl;
+            for(m=0; m<6; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            e = error_value(x, xstar, b_count);
+
+            break;
+        case 2: // two sticks
+            fractions[1] *= 0.8;
+            fractions[2] *= 0.8;
+            fractions[0] = 1-fractions[0]-fractions[1];
+            for(m=0; m<3; m++) // copy fractions to par.
+                par[m] = fractions[m];
+            for(m=0; m<6; m++)
+                par[m+3] = eigenvectors[m];
+            par[9] = lambda;
+            for(m=0; m<10; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+            out << "Parameters after BSM: " << std::endl;
+            for(m=0; m<10; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            e = error_value(x, xstar, b_count);
+
+            break;
+        case 3: // three sticks
+            fractions[1] *= 0.8;
+            fractions[2] *= 0.8;
+            fractions[3] *= 0.8;
+            fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
+            for(m=0; m<4; m++) // copy fractions to par.
+                par[m] = fractions[m];
+            for(m=0; m<9; m++) // copy eigenvectors to par.
+                par[m+4] = eigenvectors[m];
+            par[13] = lambda;
+            for(m=0; m<14; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+            out << "Parameters after BSM: " << std::endl;
+            for(m=0; m<14; m++)
+                out << par[m] << " ";
+            out << std::endl;
+            e = error_value(x, xstar, b_count);
+
+            break;
+        }
+
+        out << "X values: " << std::endl;
+        for(m=0; m<b_count; m++)
+        {
+            out << x[m] << " ";
+            if((m+1)%10==0)
+                out << std::endl;
+        }
+        out << std::endl << "X-star values: " << std::endl;
+        for(m=0; m<b_count; m++)
+        {
+            out << xstar[m] << " ";
+            if((m+1)%10==0)
+                out << std::endl;
+        }
+        out << std::endl << "Error value: " << e << std::endl;
+        out.close();
+
+
+        // DTI
         if (data.space.front() != 0.0)
         {
             float logs0 = std::log(std::max<float>(1.0,data.space.front()));
@@ -298,6 +472,9 @@ public:
         md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
+
+        delete [] x;
+        delete [] xstar;
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
@@ -307,18 +484,125 @@ public:
         mat_writer.write("fa0",&*voxel.fr.begin(), 1, voxel.fr.size()/3);
         mat_writer.write("fa1",&*voxel.fr.begin()+voxel.dim.size(), 1, voxel.fr.size()/3);
         mat_writer.write("fa2",&*voxel.fr.begin()+2*voxel.dim.size(), 1, voxel.fr.size()/3);
-
-        ofstream out;
-        out.open("out.txt", ios::app);
-        for(int i=0;i<voxel.fib_fa.size(); i++)
-            out << voxel.fib_fa[i] << std::endl;
-        out.close();
-
         mat_writer.write("gfa",&*voxel.fib_fa.begin(), 1, voxel.fib_fa.size());
         mat_writer.write("adc",&*md.begin(),1,md.size());
         mat_writer.write("axial_dif",&*d0.begin(),1,d0.size());
         mat_writer.write("radial_dif",&*d1.begin(),1,d1.size());
     }
 };
+
+void flat_matrix(arma::mat &mat, std::vector<float>& v)
+{
+    int m, n, i, j;
+    m = mat.n_rows;
+    n = mat.n_cols;
+    for(i=0; i<m; i++)
+    {
+        for(j=0; j<n; j++)
+        {
+            v.push_back(mat(i,j));
+        }
+    }
+}
+
+void cost_function(float *p, float *hx, int m, int n, void *adata)
+{
+    ad * data = (ad *)adata;
+    float lamb = 0.0f;
+    float evectors[9] = {0};
+    float Dm[9] = {0};
+    float Vm[9] = {0};
+    float tmp1[9] = {0};
+    float T[9] = {0};
+    float Ds[18] = {0};
+    float Diso[6] = {0};
+    std::vector<float> BDi;
+    std::vector<float> BDs;
+    std::vector<float> expBDs;
+    std::vector<float> rhs;
+    std::vector<float> S;
+    std::vector<float> B;
+    int i = 0, j = 0;
+    int N = data->n;
+    unsigned int b_count = data->voxel->matinvg_dg.n_cols;
+
+    BDi.clear();
+    BDi.resize(b_count);
+    BDs.clear();
+    BDs.resize(b_count*N);
+    expBDs.clear();
+    expBDs.resize(b_count*N);
+    rhs.clear();
+    rhs.resize(b_count);
+    S.clear();
+    S.resize(b_count);
+    B.clear();
+    for(i=0;i<3*N;i++)
+        evectors[i]=p[i+1+N];
+
+    if(N>=1)
+    {
+        lamb = p[N*4+1];
+        for(i=0; i<N; i++)
+        {
+            memset(Dm, 0, 9*sizeof(float));
+            for(j=0; j<3; j++)
+                Dm[3*j] = evectors[i*3+j];
+            memset(Vm, 0, 9*sizeof(float));
+            Vm[0] = lamb;
+            memset(T, 0, 9*sizeof(float));
+            image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
+            image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
+            Ds[0*N+i] = T[0*3+0];
+            Ds[1*N+i] = T[1*3+1];
+            Ds[2*N+i] = T[2*3+2];
+            Ds[3*N+i] = T[0*3+1];
+            Ds[4*N+i] = T[0*3+2];
+            Ds[5*N+i] = T[1*3+2];
+        }
+        memset(Dm, 0, 9*sizeof(float));
+        Dm[0] = Dm[4] = Dm[8] = 1.0f;
+        memset(Vm, 0, 9*sizeof(float));
+        Vm[0] = Vm[4] = Vm[8] = lamb;
+        image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
+        image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
+        int tensor_index[6] = {0, 4, 8, 1, 2, 5};
+        for(i=0; i<6; i++)
+            Diso[i] = T[tensor_index[i]];
+        arma::mat tmp = data->voxel->matg_dg;
+        flat_matrix(tmp, B);
+        image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
+        image::matrix::product(B.data(), Ds, BDs.data(), image::dyndim(b_count, 6), image::dyndim(6, N));
+        for(i=0; i<BDs.size(); i++)
+            expBDs[i] = expf(-1*BDs[i]);
+        image::matrix::product(expBDs.data(), p+1, rhs.data(), image::dyndim(b_count, N), image::dyndim(N, 1));
+        for(i=0; i<BDi.size(); i++)
+        {
+            hx[i] = p[0]*expf(-1*BDi[i])+rhs[i];
+            data->x[i] = hx[i];
+        }
+    }
+    else
+    {
+        lamb = p[0];
+        memset(Dm, 0, 9*sizeof(float));
+        Dm[0] = Dm[4] = Dm[8] = 1.0f;
+        memset(Vm, 0, 9*sizeof(float));
+        Vm[0] = Vm[4] = Vm[8] = lamb;
+        image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
+        image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
+        int tensor_index[6] = {0, 4, 8, 1, 2, 5};
+        for(i=0; i<6; i++)
+            Diso[i] = T[tensor_index[i]];
+        arma::mat tmp = data->voxel->matg_dg;
+        flat_matrix(tmp, B);
+        image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
+        for(i=0; i<BDi.size(); i++)
+        {
+            hx[i] = expf(-1*BDi[i]);
+            data->x[i] = hx[i];
+        }
+    }
+}
 
 #endif//_PROCESS_HPP

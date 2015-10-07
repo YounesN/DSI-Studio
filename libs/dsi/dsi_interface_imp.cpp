@@ -16,6 +16,7 @@
 #include "dti_process.hpp"
 #include "sig_process.hpp"
 #include "ica_process.hpp"
+#include "icabsm_process.hpp"
 #include "dsi_process.hpp"
 #include "qbi_process.hpp"
 #include "sh_process.hpp"
