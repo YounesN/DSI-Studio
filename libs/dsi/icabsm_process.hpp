@@ -378,6 +378,7 @@ public:
         // BSM
         float par[14];
         float lambda = 0.0015f;
+        out << "Lambda before: " << lambda << std::endl;
         float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
         int e_min_index = -1;
@@ -430,6 +431,8 @@ public:
                 }
                 out << std::endl;
                 out << "==============================" << std::endl;
+                out << "Lambda after: " << par[0] << std::endl;
+                out << "==============================" << std::endl;
                 break;
             case 1: // one stick
                 fractions[1] *= 0.8;
@@ -462,6 +465,8 @@ public:
                     out << mydata.x[pi] << " ";
                 }
                 out << std::endl;
+                out << "==============================" << std::endl;
+                out << "Lambda after: " << par[5] << std::endl;
                 out << "==============================" << std::endl;
                 break;
             case 2: // two sticks
@@ -497,6 +502,8 @@ public:
                 }
                 out << std::endl;
                 out << "==============================" << std::endl;
+                out << "Lambda after: " << par[9] << std::endl;
+                out << "==============================" << std::endl;
                 break;
             case 3: // three sticks
                 fractions[1] *= 0.8;
@@ -531,6 +538,8 @@ public:
                     out << mydata.x[pi] << " ";
                 }
                 out << std::endl;
+                out << "==============================" << std::endl;
+                out << "Lambda after: " << par[13] << std::endl;
                 out << "==============================" << std::endl;
                 break;
             }
