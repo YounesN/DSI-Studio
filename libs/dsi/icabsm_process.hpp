@@ -174,6 +174,10 @@ public:
         int pi, pj;
         itpp::mat mixedSig, icasig;
         itpp::mat mixing_matrix;
+        //itpp::mat W;
+        //itpp::mat mixedSigC;
+        //itpp::mat mixedMean;
+        //itpp::mat onesica;
         mixedSig.set_size(9, 64);
         mixedSig.zeros();
         // ICA
@@ -251,6 +255,20 @@ public:
         {
             qDebug() << "Exception!!!.";
         }
+
+        //onesica = itpp::ones(1, mixedSig.cols());
+        //W = fi.get_separating_matrix();
+        //mixedSigC = itpp::zeros(mixedSig.rows(), mixedSig.cols());
+        //mixedMean = itpp::zeros(mixedSig.rows(), 1);
+        //for (m = 0; m < mixedSig.rows(); m++) {
+        //    float summ = 0;
+        //    for(n=0; n < mixedSig.cols(); n++)
+        //        summ += mixedSig.get(m, n);
+        //    mixedMean(m, 0) = summ / mixedSig.cols();
+        //    for (int n = 0; n < mixedSig.cols(); n++)
+        //        mixedSigC(m, n) = mixedSig(m, n) - mixedMean(m, 0);
+        //}
+        //icasig = W * mixedSigC + (W * mixedMean) * onesica;
 
         icasig = fi.get_independent_components();
         mixing_matrix = fi.get_mixing_matrix();
