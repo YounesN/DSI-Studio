@@ -12,10 +12,10 @@
 
 using namespace std;
 
-struct ad {
+struct UserData {
     int n;
-    Voxel *voxel;
-    float x[64];
+    arma::mat *matd_g;
+    float *x;
 };
 
 void cost_function(float *p, float *hx, int m, int n, void *adata);
@@ -28,15 +28,12 @@ private:
     double a1, a2, mu, epsilon, sampleSize;
     int maxNumIterations, maxFineTune;
     int firstEig, lastEig;
-    itpp::mat mixedSig, icasig;
-    itpp::mat mixing_matrix;
     std::vector<float> d0;
     std::vector<float> d1;
     std::vector<float> md;
     std::vector<float> num_fibers;
 
     // BSM variables
-    float par[14];
     float p_min0[1];
     float p_max0[1];
     float p_min1[6];
@@ -45,10 +42,6 @@ private:
     float p_max2[10];
     float p_min3[14];
     float p_max3[14];
-    float fractions[4];
-    float lambda;
-    float eigenvectors[9];
-    float info[LM_INFO_SZ];
 
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
@@ -138,10 +131,6 @@ public:
         firstEig = 1;
         lastEig = 3;
 
-        lambda = 0.0015f;
-
-        mixedSig.set_size(9, 64);
-        mixedSig.zeros();
         voxel.fr.clear();
         voxel.fr.resize(numOfIC* voxel.dim.size());
         voxel.fib_fa.clear();
@@ -180,6 +169,13 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
+        ofstream out;
+        out.open("output.txt", ios::app);
+        int pi, pj;
+        itpp::mat mixedSig, icasig;
+        itpp::mat mixing_matrix;
+        mixedSig.set_size(9, 64);
+        mixedSig.zeros();
         // ICA
         unsigned int i=0,j=0,k=0,m=0,n=0;
         /* get 3d position */
@@ -191,6 +187,8 @@ public:
         index -= j * voxel.dim.w;
 
         i = (unsigned int) index / 1;
+
+        out << "i: " << i << ", j: " << j << ", k: " << k << std::endl;
 
         if(i > 0 && j > 0)
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 0);
@@ -217,6 +215,17 @@ public:
 
         if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 8);
+
+        out << "Original Signal for center voxel" << std::endl;
+        for(pi=0; pi<mixedSig.rows(); pi++)
+        {
+            for(pj=0; pj<mixedSig.cols(); pj++)
+            {
+                out << mixedSig.get(pi, pj) << " ";
+            }
+            out << std::endl;
+        }
+        out << "==============================" << std::endl;
 
         itpp::Fast_ICA fi(mixedSig);
         fi.set_approach(approach);
@@ -245,6 +254,28 @@ public:
 
         icasig = fi.get_independent_components();
         mixing_matrix = fi.get_mixing_matrix();
+
+        out << "ICA Signal" << std::endl;
+        for(pi=0; pi<icasig.rows(); pi++)
+        {
+            for(pj=0; pj<icasig.cols(); pj++)
+            {
+                out << icasig.get(pi, pj) << " ";
+            }
+            out << std::endl;
+        }
+        out << "==============================" << std::endl;
+
+        out << "Mixing matrix" << std::endl;
+        for(pi=0; pi<mixing_matrix.rows(); pi++)
+        {
+            for(pj=0; pj<mixing_matrix.cols(); pj++)
+            {
+                out << mixing_matrix.get(pi, pj) << " ";
+            }
+            out << std::endl;
+        }
+        out << "==============================" << std::endl;
 
         for(m = 0; m < icasig.rows(); m++)
         {
@@ -282,6 +313,8 @@ public:
         double V[9],d[3];
         std::vector<float> signal(icasig.cols());
         std::vector<float> w(icasig.rows());
+        float eigenvectors[9]; // BSM
+        float fractions[4]; // BSM
 
         for(m=0; m<icasig.rows(); m++)
         {
@@ -325,6 +358,9 @@ public:
         }
 
         // BSM
+        float par[14];
+        float lambda = 0.0015f;
+        float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
         int e_min_index = -1;
         float opts[LM_OPTS_SZ];
@@ -332,10 +368,11 @@ public:
         opts[1] = opts[2] = 1E-8;
         opts[3] = 1E-8;
         opts[4] = 1E-3;
-        float x[64];
-        float xstar[64];
-        ad mydata;
-        mydata.voxel = &voxel;
+        float *x = new float[64];
+        float *xstar = new float[64];
+        UserData mydata;
+        mydata.x = new float[64];
+        mydata.matd_g = &voxel.matg_dg;
         float e[4]={0};
         float e_min=1E+15;
         float V_best[9];
@@ -361,6 +398,20 @@ public:
                     e_min = e[m];
                     e_min_index = m;
                 }
+                out << "X matrix for zero sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
+                out << "X^ matrix for zero sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << mydata.x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
                 break;
             case 1: // one stick
                 fractions[1] *= 0.8;
@@ -380,6 +431,20 @@ public:
                     for(n=0; n<3; n++)
                         V_best[n]=par[n+2];
                 }
+                out << "X matrix for one stick" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
+                out << "X^ matrix for one stick" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << mydata.x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
                 break;
             case 2: // two sticks
                 fractions[1] *= 0.8;
@@ -400,6 +465,20 @@ public:
                     for(n=0; n<6; n++)
                         V_best[n]=par[n+3];
                 }
+                out << "X matrix for two sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
+                out << "X^ matrix for two sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << mydata.x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
                 break;
             case 3: // three sticks
                 fractions[1] *= 0.8;
@@ -421,6 +500,20 @@ public:
                     for(n=0; n<9; n++)
                         V_best[n]=par[n+4];
                 }
+                out << "X matrix for three sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
+                out << "X^ matrix for three sticks" << std::endl;
+                for(pi=0; pi<b_count; pi++)
+                {
+                    out << mydata.x[pi] << " ";
+                }
+                out << std::endl;
+                out << "==============================" << std::endl;
                 break;
             }
         }
@@ -435,6 +528,13 @@ public:
             voxel.fr[data.voxel_index] = 0;
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            out << "Final eigenvector" << std::endl;
+            for(pi=0; pi<9; pi++)
+            {
+                out << 0 << " ";
+            }
+            out << std::endl;
+            out << "==============================" << std::endl;
             break;
         case 1:
             V[0] = V[1] = V[2] = 0;
@@ -443,6 +543,13 @@ public:
             std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            out << "Final eigenvector" << std::endl;
+            for(pi=0; pi<3; pi++)
+                out << V_best[pi] << " ";
+            for(pi=0; pi<6; pi++)
+                out << 0 << " ";
+            out << std::endl;
+            out << "==============================" << std::endl;
             break;
         case 2:
             V[0] = V[1] = V[2] = 0;
@@ -450,12 +557,24 @@ public:
             std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
             std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            out << "Final eigenvector" << std::endl;
+            for(pi=0; pi<6; pi++)
+                out << V_best[pi] << " ";
+            for(pi=0; pi<3; pi++)
+                out << 0 << " ";
+            out << std::endl;
+            out << "==============================" << std::endl;
             break;
         case 3:
             V[0] = V[1] = V[2] = 0;
             std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
             std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
             std::copy(V_best+6, V_best+9, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            out << "Final eigenvector" << std::endl;
+            for(pi=0; pi<9; pi++)
+                out << V_best[pi] << " ";
+            out << std::endl;
+            out << "==============================" << std::endl;
             break;
         }
         num_fibers[data.voxel_index] = e_min_index;
@@ -494,6 +613,11 @@ public:
         md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
+
+        delete [] x;
+        delete [] xstar;
+        delete [] mydata.x;
+        out.close();
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
@@ -528,7 +652,8 @@ void flat_matrix(arma::mat &mat, std::vector<float>& v)
 
 void cost_function(float *p, float *hx, int m, int n, void *adata)
 {
-    ad * data = (ad *)adata;
+    UserData * data = (UserData *)adata;
+    arma::mat matd_g = *data->matd_g;
     float lamb = 0.0f;
     float evectors[9] = {0};
     float Dm[9] = {0};
@@ -545,7 +670,7 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
     std::vector<float> B;
     int i = 0, j = 0;
     int N = data->n;
-    unsigned int b_count = data->voxel->matinvg_dg.n_cols;
+    unsigned int b_count = matd_g.n_rows;
 
     BDi.clear();
     BDi.resize(b_count);
@@ -590,8 +715,7 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
         int tensor_index[6] = {0, 4, 8, 1, 2, 5};
         for(i=0; i<6; i++)
             Diso[i] = T[tensor_index[i]];
-        arma::mat tmp = data->voxel->matg_dg;
-        flat_matrix(tmp, B);
+        flat_matrix(matd_g, B);
         image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
         image::matrix::product(B.data(), Ds, BDs.data(), image::dyndim(b_count, 6), image::dyndim(6, N));
         for(i=0; i<BDs.size(); i++)
@@ -615,8 +739,7 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
         int tensor_index[6] = {0, 4, 8, 1, 2, 5};
         for(i=0; i<6; i++)
             Diso[i] = T[tensor_index[i]];
-        arma::mat tmp = data->voxel->matg_dg;
-        flat_matrix(tmp, B);
+        flat_matrix(matd_g, B);
         image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
         for(i=0; i<BDi.size(); i++)
         {
