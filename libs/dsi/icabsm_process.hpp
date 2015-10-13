@@ -325,20 +325,24 @@ public:
         mydata.voxel = &voxel;
         mydata.n = icasig.rows();
         float opts[LM_OPTS_SZ];
-        opts[0] = LM_INIT_MU;
-        opts[1] = opts[2] = 1E-8;
-        opts[3] = 1E-3;
-        opts[4] = 1E-8;
+        opts[0] = 1E-3;
+        opts[1] = opts[2] = 1E-15;
+        opts[3] = 1E-15;
+        opts[4] = 1E-3;
         int b_count = voxel.bvalues.size()-1;
         float *x = new float[b_count];
         float *xstar = new float[b_count];
+        mydata.x = new float[b_count];
         for(m=0; m<b_count; m++)
         {
             x[m] = mixedSig(4,m);
             xstar[m] = mixedSig(4,m);
+            mydata.x[m] = mixedSig(4,m);
         }
-        float e=0;
-        mydata.x = x;
+        float e[4]={0};
+        float e_min=1E+15;
+        int e_min_index = -1;
+        float V_best[9];
 
         ofstream out;
         out.open("output.txt", ios::app);
@@ -347,96 +351,131 @@ public:
         out << "Parameters before BSM: " << std::endl;
         int result;
 
-        switch(icasig.rows())
+        for(m = 0;m <= icasig.rows(); m++)
         {
-        case 0: // zero sticks
-            par[0] = lambda;
-            out << par[0] << std::endl;
-            result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-            out << "Parameters after BSM: " << std::endl;
-            out << par[0] << std::endl;
-            e = error_value(x, xstar, b_count);
-
-            break;
-        case 1: // one stick
-            fractions[1] *= 0.8;
-            fractions[0] = 1-fractions[1];
-            par[0] = fractions[0];
-            par[1] = fractions[1];
-            for(m=0; m<3; m++)
-                par[m+2] = eigenvectors[m];
-            par[5] = lambda;
-            for(m=0; m<6; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-            out << "Parameters after BSM: " << std::endl;
-            for(m=0; m<6; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            e = error_value(x, xstar, b_count);
-
-            break;
-        case 2: // two sticks
-            fractions[1] *= 0.8;
-            fractions[2] *= 0.8;
-            fractions[0] = 1-fractions[0]-fractions[1];
-            for(m=0; m<3; m++) // copy fractions to par.
-                par[m] = fractions[m];
-            for(m=0; m<6; m++)
-                par[m+3] = eigenvectors[m];
-            par[9] = lambda;
-            for(m=0; m<10; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-            out << "Parameters after BSM: " << std::endl;
-            for(m=0; m<10; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            e = error_value(x, xstar, b_count);
-
-            break;
-        case 3: // three sticks
-            fractions[1] *= 0.8;
-            fractions[2] *= 0.8;
-            fractions[3] *= 0.8;
-            fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
-            for(m=0; m<4; m++) // copy fractions to par.
-                par[m] = fractions[m];
-            for(m=0; m<9; m++) // copy eigenvectors to par.
-                par[m+4] = eigenvectors[m];
-            par[13] = lambda;
-            for(m=0; m<14; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-            out << "Parameters after BSM: " << std::endl;
-            for(m=0; m<14; m++)
-                out << par[m] << " ";
-            out << std::endl;
-            e = error_value(x, xstar, b_count);
-
-            break;
-        }
-
-        out << "X values: " << std::endl;
-        for(m=0; m<b_count; m++)
-        {
-            out << x[m] << " ";
-            if((m+1)%10==0)
+            switch(m)
+            {
+            case 0: // zero sticks
+                par[0] = lambda;
+                out << par[0] << std::endl;
+                result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                out << "Parameters after BSM: " << std::endl;
+                out << par[0] << std::endl;
+                e[m] = (info[1]>=0)?info[1]:-1*info[1];
+                if(e_min > e[m])
+                {
+                    e_min = e[m];
+                    e_min_index = m;
+                }
+                break;
+            case 1: // one stick
+                fractions[1] *= 0.8;
+                fractions[0] = 1-fractions[1];
+                par[0] = fractions[0];
+                par[1] = fractions[1];
+                for(m=0; m<3; m++)
+                    par[m+2] = eigenvectors[m];
+                par[5] = lambda;
+                for(m=0; m<6; m++)
+                    out << par[m] << " ";
                 out << std::endl;
-        }
-        out << std::endl << "X-star values: " << std::endl;
-        for(m=0; m<b_count; m++)
-        {
-            out << xstar[m] << " ";
-            if((m+1)%10==0)
+                result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                out << "Parameters after BSM: " << std::endl;
+                for(m=0; m<6; m++)
+                    out << par[m] << " ";
                 out << std::endl;
+                e[m] = (info[1]>=0)?info[1]:-1*info[1];
+                if(e_min > e[m])
+                {
+                    e_min = e[m];
+                    e_min_index = m;
+                    for(n=0; n<3; n++)
+                        V_best[n]=par[n+2];
+                }
+                break;
+            case 2: // two sticks
+                fractions[1] *= 0.8;
+                fractions[2] *= 0.8;
+                fractions[0] = 1-fractions[0]-fractions[1];
+                for(m=0; m<3; m++) // copy fractions to par.
+                    par[m] = fractions[m];
+                for(m=0; m<6; m++)
+                    par[m+3] = eigenvectors[m];
+                par[9] = lambda;
+                for(m=0; m<10; m++)
+                    out << par[m] << " ";
+                out << std::endl;
+                result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                out << "Parameters after BSM: " << std::endl;
+                for(m=0; m<10; m++)
+                    out << par[m] << " ";
+                out << std::endl;
+                e[m] = (info[1]>=0)?info[1]:-1*info[1];
+                if(e_min > e[m])
+                {
+                    e_min = e[m];
+                    e_min_index = m;
+                    for(n=0; n<6; n++)
+                        V_best[n]=par[n+3];
+                }
+                break;
+            case 3: // three sticks
+                fractions[1] *= 0.8;
+                fractions[2] *= 0.8;
+                fractions[3] *= 0.8;
+                fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
+                for(m=0; m<4; m++) // copy fractions to par.
+                    par[m] = fractions[m];
+                for(m=0; m<9; m++) // copy eigenvectors to par.
+                    par[m+4] = eigenvectors[m];
+                par[13] = lambda;
+                for(m=0; m<14; m++)
+                    out << par[m] << " ";
+                out << std::endl;
+                result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                out << "Parameters after BSM: " << std::endl;
+                for(m=0; m<14; m++)
+                    out << par[m] << " ";
+                out << std::endl;
+                e[m] = (info[1]>=0)?info[1]:-1*info[1];
+                if(e_min > e[m])
+                {
+                    e_min = e[m];
+                    e_min_index = m;
+                    for(n=0; n<9; n++)
+                        V_best[n]=par[n+4];
+                }
+                break;
+            }
         }
-        out << std::endl << "Error value: " << e << std::endl;
-        out.close();
 
+        switch(e_min_index)
+        {
+        case 0:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            break;
+        case 1:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            break;
+        case 2:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            break;
+        case 3:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V_best+6, V_best+9, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            break;
+        }
 
         // DTI
         if (data.space.front() != 0.0)
@@ -475,6 +514,7 @@ public:
 
         delete [] x;
         delete [] xstar;
+        delete [] mydata.x;
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
