@@ -27,3 +27,7 @@ The .pro files has to be edited to match the file system. Other required data to
 4. download armadillo library.
 
 http://arma.sourceforge.net/
+
+5. Levmar library needed to implement Levenberg-Marquardt optimization algorithm for BSM.
+
+http://users.ics.forth.gr/~lourakis/levmar/
