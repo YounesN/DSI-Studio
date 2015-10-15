@@ -172,6 +172,7 @@ public:
         int pi, pj;
         int ica_num = 0;
         itpp::mat mixedSig, icasig;
+        itpp::mat icasig_no_log;
         itpp::mat mixing_matrix;
         mixedSig.set_size(9, 64);
         mixedSig.zeros();
@@ -281,6 +282,7 @@ public:
                 }
 
                 icasig = fi.get_independent_components();
+                icasig_no_log = icasig;
                 mixing_matrix = fi.get_mixing_matrix();
 
                 if(icasig.rows() < ica_num) // Add zero if the number of ICA signal is less than number of fibers
@@ -299,16 +301,8 @@ public:
                 for(m = 0; m < icasig.rows(); m++)
                 {
                     double sum = 0;
-                    double min_value = icasig.get(m, 0);
-                    double max_value = icasig.get(m, 0);
                     for(n=0;n<icasig.cols();n++)
-                    {
                         sum+=icasig.get(m,n);
-                        if(icasig.get(m,n)>max_value)
-                            max_value = icasig.get(m, n);
-                        if(icasig.get(m,n)<min_value)
-                            min_value = icasig.get(m,n);
-                    }
                     if(sum<0)
                     {
                         for(n=0;n<icasig.cols();n++)
@@ -316,14 +310,24 @@ public:
                         for(n=0;n<mixing_matrix.rows();n++)
                             mixing_matrix.set(n, m, mixing_matrix.get(n, m)*-1);
                     }
+                    double min_value = icasig.get(m, 0);
+                    double max_value = icasig.get(m, 0);
+                    for(n=0;n<icasig.cols();n++)
+                    {
+                        if(icasig.get(m,n)>max_value)
+                            max_value = icasig.get(m, n);
+                        if(icasig.get(m,n)<min_value)
+                            min_value = icasig.get(m,n);
+                    }
                     for(n=0;n<icasig.cols();n++)
                     {
                         double tmp = icasig.get(m, n);
                         double t = tmp - min_value;
                         double b = max_value - min_value;
-                        double f = (t/b)*0.8+1;
+                        double f = (t/b)*0.8+.1;
                         icasig.set(m,n, f);
-                        icasig.set(m,n, std::max<float>(0.0, std::log(std::max<float>(1.0, icasig.get(m,n)))));
+                        icasig_no_log.set(m,n, f);
+                        icasig.set(m,n, std::log(icasig.get(m,n)));
                     }
                 }
 
@@ -358,6 +362,8 @@ public:
                     eigenvectors[m * 3 + 2] = V[2];
                 }
 
+                icasig = icasig_no_log;
+
                 get_mat_row(mixing_matrix, w, 4);
                 float sum = 0;
                 for(m=0; m<icasig.rows(); m++)
@@ -377,7 +383,6 @@ public:
                 xstar[n] = mixedSig(4,n);
                 mydata.x[n] = mixedSig(4,n);
             }
-
             switch(ica_num)
             {
             case 0: // zero sticks
