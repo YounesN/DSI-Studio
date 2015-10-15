@@ -115,7 +115,6 @@ public:
         p_max3[7] = 1.0f; p_max3[8] = 1.0f; p_max3[9] = 1.0f; p_max3[10] = 1.0f; p_max3[11] = 1.0f; p_max3[12] = 1.0f; p_max3[13] = 0.0020f;
 
         approach = FICA_APPROACH_SYMM;
-        numOfIC = 3;
         g = FICA_NONLIN_TANH;
         initState = FICA_INIT_RAND;
         finetune = false;
@@ -124,6 +123,7 @@ public:
         a1 = 1;
         a2 = 1;
         mu = 1;
+        numOfIC = 3;
         epsilon = 0.0001f;
         sampleSize = 1;
         maxNumIterations = 1000;
@@ -171,13 +171,12 @@ public:
     {
         ofstream out;
         out.open("output.txt", ios::app);
+
         int pi, pj;
+        int ica_num = 0;
         itpp::mat mixedSig, icasig;
+        itpp::mat icasig_no_log;
         itpp::mat mixing_matrix;
-        //itpp::mat W;
-        //itpp::mat mixedSigC;
-        //itpp::mat mixedMean;
-        //itpp::mat onesica;
         mixedSig.set_size(9, 64);
         mixedSig.zeros();
         // ICA
@@ -192,7 +191,9 @@ public:
 
         i = (unsigned int) index / 1;
 
+        out << "==========================================" << std::endl;
         out << "i: " << i << ", j: " << j << ", k: " << k << std::endl;
+        out << "------------------------------------------" << std::endl;
 
         if(i > 0 && j > 0)
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 0);
@@ -220,168 +221,19 @@ public:
         if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 8);
 
-        out << "Original Signal for center voxel" << std::endl;
-        for(pi=0; pi<mixedSig.rows(); pi++)
-        {
-            for(pj=0; pj<mixedSig.cols(); pj++)
-            {
-                out << mixedSig.get(pi, pj) << " ";
-            }
-            out << std::endl;
-        }
-        out << "==============================" << std::endl;
-
-        itpp::Fast_ICA fi(mixedSig);
-        fi.set_approach(approach);
-        fi.set_nrof_independent_components(numOfIC);
-        fi.set_non_linearity(g);
-        fi.set_fine_tune(finetune);
-        fi.set_a1(a1);
-        fi.set_a2(a2);
-        fi.set_mu(mu);
-        fi.set_epsilon(epsilon);
-        fi.set_sample_size(sampleSize);
-        fi.set_stabilization(stabilization);
-        fi.set_max_num_iterations(maxNumIterations);
-        fi.set_max_fine_tune(maxFineTune);
-        fi.set_first_eig(firstEig);
-        fi.set_last_eig(lastEig);
-        fi.set_pca_only(PCAonly);
-
-        try{
-            fi.separate();
-        }
-        catch(...)
-        {
-            qDebug() << "Exception!!!.";
-        }
-
-        //onesica = itpp::ones(1, mixedSig.cols());
-        //W = fi.get_separating_matrix();
-        //mixedSigC = itpp::zeros(mixedSig.rows(), mixedSig.cols());
-        //mixedMean = itpp::zeros(mixedSig.rows(), 1);
-        //for (m = 0; m < mixedSig.rows(); m++) {
-        //    float summ = 0;
-        //    for(n=0; n < mixedSig.cols(); n++)
-        //        summ += mixedSig.get(m, n);
-        //    mixedMean(m, 0) = summ / mixedSig.cols();
-        //    for (int n = 0; n < mixedSig.cols(); n++)
-        //        mixedSigC(m, n) = mixedSig(m, n) - mixedMean(m, 0);
-        //}
-        //icasig = W * mixedSigC + (W * mixedMean) * onesica;
-
-        icasig = fi.get_independent_components();
-        mixing_matrix = fi.get_mixing_matrix();
-
-        out << "ICA Signal" << std::endl;
-        for(pi=0; pi<icasig.rows(); pi++)
-        {
-            for(pj=0; pj<icasig.cols(); pj++)
-            {
-                out << icasig.get(pi, pj) << " ";
-            }
-            out << std::endl;
-        }
-        out << "==============================" << std::endl;
-
-        out << "Mixing matrix" << std::endl;
-        for(pi=0; pi<mixing_matrix.rows(); pi++)
-        {
-            for(pj=0; pj<mixing_matrix.cols(); pj++)
-            {
-                out << mixing_matrix.get(pi, pj) << " ";
-            }
-            out << std::endl;
-        }
-        out << "==============================" << std::endl;
-
-        for(m = 0; m < icasig.rows(); m++)
-        {
-            double sum = 0;
-            double min_value = icasig.get(m, 0);
-            double max_value = icasig.get(m, 0);
-            for(n=0;n<icasig.cols();n++)
-            {
-                sum+=icasig.get(m,n);
-                if(icasig.get(m,n)>max_value)
-                    max_value = icasig.get(m, n);
-                if(icasig.get(m,n)<min_value)
-                    min_value = icasig.get(m,n);
-            }
-            if(sum<0)
-            {
-                for(n=0;n<icasig.cols();n++)
-                    icasig.set(m, n, icasig.get(m,n)*-1);
-                for(n=0;n<mixing_matrix.rows();n++)
-                    mixing_matrix.set(n, m, mixing_matrix.get(n, m)*-1);
-            }
-            for(n=0;n<icasig.cols();n++)
-            {
-                double tmp = icasig.get(m, n);
-                double t = tmp - min_value;
-                double b = max_value - min_value;
-                double f = (t/b)*0.8+1;
-                icasig.set(m,n, f);
-                icasig.set(m,n, std::max<float>(0.0, std::log(std::max<float>(1.0, icasig.get(m,n)))));
-            }
-        }
-
+        // ICA variables
         arma::mat tensor_param(6,1);
         double tensor[9];
         double V[9],d[3];
         std::vector<float> signal(icasig.cols());
         std::vector<float> w(icasig.rows());
-        float eigenvectors[9]; // BSM
-        float fractions[4]; // BSM
 
-        for(m=0; m<icasig.rows(); m++)
-        {
-            get_mat_row(icasig, signal, m);
-            arma::mat matsignal(icasig.cols(),1);
-            set_arma_col(matsignal, signal, 0);
-            tensor_param = voxel.matinvg_dg * matsignal;
-
-            unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
-            for(unsigned int index = 0; index < 9; index++)
-                tensor[index] = tensor_param(tensor_index[index],0);
-
-            image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
-            if (d[1] < 0.0)
-            {
-                d[1] = 0.0;
-                d[2] = 0.0;
-            }
-            if (d[2] < 0.0)
-                d[2] = 0.0;
-            if (d[0] < 0.0)
-            {
-                d[0] = 0.0;
-                d[1] = 0.0;
-                d[2] = 0.0;
-            }
-            std::copy(V, V+3, voxel.fib_dir.begin() + m*voxel.dim.size() * 3 + data.voxel_index * 3);
-            eigenvectors[m * 3 + 0] = V[0]; // we need this for BSM
-            eigenvectors[m * 3 + 1] = V[1];
-            eigenvectors[m * 3 + 2] = V[2];
-        }
-        get_mat_row(mixing_matrix, w, 4);
-        float sum = 0;
-        for(m=0; m<icasig.rows(); m++)
-            sum += abs(w[m]);
-
-        for(m=0; m<icasig.rows(); m++)
-        {
-            fractions[m+1] = abs(w[m])/sum;
-            voxel.fr[m*voxel.dim.size()+data.voxel_index] = fractions[m+1];
-        }
-
-        // BSM
+        // BSM variables
         float par[14];
         float lambda = 0.0015f;
-        out << "Lambda before: " << lambda << std::endl;
         float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
-        int e_min_index = -1;
+        int min_index = -1;
         float opts[LM_OPTS_SZ];
         opts[0] = 1E-3;
         opts[1] = opts[2] = 1E-8;
@@ -393,46 +245,205 @@ public:
         mydata.x = new float[64];
         mydata.matd_g = &voxel.matg_dg;
         float e[4]={0};
-        float e_min=1E+15;
+        float SC[4] = {0};
+        float SC_min=1E+15;
         float V_best[9];
         int result;
 
-        for(m = 0;m <= icasig.rows(); m++)
+        for(ica_num = 0; ica_num <=3; ica_num++)
         {
+            float eigenvectors[9]; // BSM
+            float fractions[4]; // BSM
+            numOfIC = ica_num;
+
+            if(ica_num!=0) // We do not run ICA for zero sticks, we run only BSM.
+            {
+                if(ica_num == 1 || ica_num == 3)
+                    g = FICA_NONLIN_POW3;
+                else
+                    g = FICA_NONLIN_TANH;
+
+                itpp::Fast_ICA fi(mixedSig);
+                fi.set_approach(approach);
+                fi.set_nrof_independent_components(numOfIC);
+                fi.set_non_linearity(g);
+                fi.set_fine_tune(finetune);
+                fi.set_a1(a1);
+                fi.set_a2(a2);
+                fi.set_mu(mu);
+                fi.set_epsilon(epsilon);
+                fi.set_sample_size(sampleSize);
+                fi.set_stabilization(stabilization);
+                fi.set_max_num_iterations(maxNumIterations);
+                fi.set_max_fine_tune(maxFineTune);
+                fi.set_first_eig(firstEig);
+                fi.set_last_eig(lastEig);
+                fi.set_pca_only(PCAonly);
+
+                try{
+                    fi.separate();
+                }
+                catch(...)
+                {
+                    qDebug() << "Exception!!!.";
+                }
+
+                icasig = fi.get_independent_components();
+                icasig_no_log = icasig;
+                mixing_matrix = fi.get_mixing_matrix();
+
+                if(icasig.rows() < ica_num) // Add zero if the number of ICA signal is less than number of fibers
+                {
+                    icasig.set_size(ica_num, icasig.cols());
+                    itpp::vec tmp(icasig.cols());
+                    tmp.zeros();
+                    for(m = icasig.rows(); m < ica_num-1; m++)
+                    {
+                        icasig.set_col(m, tmp);
+                    }
+                }
+
+                assert(icasig.rows() == ica_num);
+
+                out << "ICA signal before scaling: " << std::endl;
+                for(m=0; m<icasig.rows(); m++)
+                {
+                    out << "Row " << m+1 << std::endl;
+                    for(n=0; n<icasig.cols(); n++)
+                        out << icasig.get(m, n) << " ";
+                    out << std::endl;
+                }
+                out << "------------------------------------------" << std::endl;
+
+                for(m = 0; m < icasig.rows(); m++)
+                {
+                    double sum = 0;
+                    for(n=0;n<icasig.cols();n++)
+                        sum+=icasig.get(m,n);
+                    if(sum<0)
+                    {
+                        for(n=0;n<icasig.cols();n++)
+                            icasig.set(m, n, icasig.get(m,n)*-1);
+                        for(n=0;n<mixing_matrix.rows();n++)
+                            mixing_matrix.set(n, m, mixing_matrix.get(n, m)*-1);
+                    }
+                    double min_value = icasig.get(m, 0);
+                    double max_value = icasig.get(m, 0);
+                    for(n=0;n<icasig.cols();n++)
+                    {
+                        if(icasig.get(m,n)>max_value)
+                            max_value = icasig.get(m, n);
+                        if(icasig.get(m,n)<min_value)
+                            min_value = icasig.get(m,n);
+                    }
+                    for(n=0;n<icasig.cols();n++)
+                    {
+                        double tmp = icasig.get(m, n);
+                        double t = tmp - min_value;
+                        double b = max_value - min_value;
+                        double f = (t/b)*0.8+.1;
+                        icasig.set(m,n, f);
+                        icasig_no_log.set(m,n, f);
+                        icasig.set(m,n, std::log(icasig.get(m,n)));
+                    }
+                }
+
+                out << "ICA signal after scaling: " << std::endl;
+                for(m=0; m<icasig_no_log.rows(); m++)
+                {
+                    out << "Row " << m+1 << std::endl;
+                    for(n=0; n<icasig_no_log.cols(); n++)
+                        out << icasig_no_log.get(m, n) << " ";
+                    out << std::endl;
+                }
+                out << "------------------------------------------" << std::endl;
+
+                for(m=0; m<icasig.rows(); m++)
+                {
+                    get_mat_row(icasig, signal, m);
+                    arma::mat matsignal(icasig.cols(),1);
+                    set_arma_col(matsignal, signal, 0);
+                    tensor_param = voxel.matinvg_dg * matsignal;
+
+                    unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
+                    for(unsigned int index = 0; index < 9; index++)
+                        tensor[index] = tensor_param(tensor_index[index],0);
+
+                    image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
+                    if (d[1] < 0.0)
+                    {
+                        d[1] = 0.0;
+                        d[2] = 0.0;
+                    }
+                    if (d[2] < 0.0)
+                        d[2] = 0.0;
+                    if (d[0] < 0.0)
+                    {
+                        d[0] = 0.0;
+                        d[1] = 0.0;
+                        d[2] = 0.0;
+                    }
+                    std::copy(V, V+3, voxel.fib_dir.begin() + m*voxel.dim.size() * 3 + data.voxel_index * 3);
+                    eigenvectors[m * 3 + 0] = V[0]; // we need this for BSM
+                    eigenvectors[m * 3 + 1] = V[1];
+                    eigenvectors[m * 3 + 2] = V[2];
+                }
+
+                icasig = icasig_no_log;
+
+                get_mat_row(mixing_matrix, w, 4);
+                float sum = 0;
+                for(m=0; m<icasig.rows(); m++)
+                    sum += abs(w[m]);
+
+                for(m=0; m<icasig.rows(); m++)
+                {
+                    fractions[m+1] = abs(w[m])/sum;
+                    voxel.fr[m*voxel.dim.size()+data.voxel_index] = fractions[m+1];
+                }
+
+            }
+
             for(n=0; n<b_count; n++)
             {
                 x[n] = mixedSig(4,n);
                 xstar[n] = mixedSig(4,n);
                 mydata.x[n] = mixedSig(4,n);
             }
-            switch(m)
+
+            out << "X value: " << std::endl;
+            for(n=0; n<b_count; n++)
+            {
+                out << x[n] << " ";
+                if(n%10==0)
+                    out << std::endl;
+            }
+            out << std::endl;
+            out << "------------------------------------------" << std::endl;
+
+            switch(ica_num)
             {
             case 0: // zero sticks
                 par[0] = lambda;
                 mydata.n = 0;
+
+                out << "Zero sticks" << std::endl;
+                out << "Initial Parameters: " << std::endl;
+                out << par[0] << std::endl;
+
                 result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-                e[m] = info[1];
-                if(e_min > e[m])
+
+                out << "Final Parameters: " << std::endl;
+                out << par[0] << std::endl;
+                out << "------------------------------------------" << std::endl;
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
                 {
-                    e_min = e[m];
-                    e_min_index = m;
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
                 }
-                out << "X matrix for zero sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "X^ matrix for zero sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << mydata.x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "Lambda after: " << par[0] << std::endl;
-                out << "==============================" << std::endl;
                 break;
             case 1: // one stick
                 fractions[1] *= 0.8;
@@ -443,31 +454,30 @@ public:
                     par[n+2] = eigenvectors[n];
                 par[5] = lambda;
                 mydata.n = 1;
+
+                out << "One stick" << std::endl;
+                out<< "Initial Parameters: " << std::endl;
+                for(n = 0; n<6; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+
                 result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-                e[m] = info[1];
-                if(e_min > e[m])
+
+                out<< "Final Parameters: " << std::endl;
+                for(n = 0; n<6; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+                out << "------------------------------------------" << std::endl;
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+6*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
                 {
-                    e_min = e[m];
-                    e_min_index = m;
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
                     for(n=0; n<3; n++)
                         V_best[n]=par[n+2];
                 }
-                out << "X matrix for one stick" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "X^ matrix for one stick" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << mydata.x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "Lambda after: " << par[5] << std::endl;
-                out << "==============================" << std::endl;
                 break;
             case 2: // two sticks
                 fractions[1] *= 0.8;
@@ -479,31 +489,30 @@ public:
                     par[n+3] = eigenvectors[n];
                 par[9] = lambda;
                 mydata.n = 2;
+
+                out << "Two sticks" << std::endl;
+                out<< "Initial Parameters: " << std::endl;
+                for(n = 0; n<10; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+
                 result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-                e[m] = info[1];
-                if(e_min > e[m])
+
+                out<< "Final Parameters: " << std::endl;
+                for(n = 0; n<10; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+                out << "------------------------------------------" << std::endl;
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
                 {
-                    e_min = e[m];
-                    e_min_index = m;
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
                     for(n=0; n<6; n++)
                         V_best[n]=par[n+3];
                 }
-                out << "X matrix for two sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "X^ matrix for two sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << mydata.x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "Lambda after: " << par[9] << std::endl;
-                out << "==============================" << std::endl;
                 break;
             case 3: // three sticks
                 fractions[1] *= 0.8;
@@ -516,36 +525,49 @@ public:
                     par[n+4] = eigenvectors[n];
                 par[13] = lambda;
                 mydata.n = 3;
+
+                out << "Three sticks" << std::endl;
+                out<< "Initial Parameters: " << std::endl;
+                for(n = 0; n<14; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+
                 result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
-                e[m] = info[1];
-                if(e_min > e[m])
+
+                out<< "Final Parameters: " << std::endl;
+                for(n = 0; n<14; n++)
+                    out << par[n] << " ";
+                out << std::endl;
+                out << "------------------------------------------" << std::endl;
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+14*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
                 {
-                    e_min = e[m];
-                    e_min_index = m;
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
                     for(n=0; n<9; n++)
                         V_best[n]=par[n+4];
                 }
-                out << "X matrix for three sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "X^ matrix for three sticks" << std::endl;
-                for(pi=0; pi<b_count; pi++)
-                {
-                    out << mydata.x[pi] << " ";
-                }
-                out << std::endl;
-                out << "==============================" << std::endl;
-                out << "Lambda after: " << par[13] << std::endl;
-                out << "==============================" << std::endl;
                 break;
             }
+            out << "X^ value: " << std::endl;
+            for(n=0; n<b_count; n++)
+            {
+                out << mydata.x[n] << " ";
+                if(n%10==0)
+                    out << std::endl;
+            }
+            out << std::endl;
+            out << "------------------------------------------" << std::endl;
+
+            out << "Error value: " << e[ica_num] << std::endl;
+            out << "SC value: " << SC[ica_num] << std::endl;
         }
 
-        switch(e_min_index)
+        out << "==========================================" << std::endl;
+
+        switch(min_index)
         {
         case 0:
             V[0] = V[1] = V[2] = 0;
@@ -555,13 +577,6 @@ public:
             voxel.fr[data.voxel_index] = 0;
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
-            out << "Final eigenvector" << std::endl;
-            for(pi=0; pi<9; pi++)
-            {
-                out << 0 << " ";
-            }
-            out << std::endl;
-            out << "==============================" << std::endl;
             break;
         case 1:
             V[0] = V[1] = V[2] = 0;
@@ -570,13 +585,6 @@ public:
             std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
-            out << "Final eigenvector" << std::endl;
-            for(pi=0; pi<3; pi++)
-                out << V_best[pi] << " ";
-            for(pi=0; pi<6; pi++)
-                out << 0 << " ";
-            out << std::endl;
-            out << "==============================" << std::endl;
             break;
         case 2:
             V[0] = V[1] = V[2] = 0;
@@ -584,27 +592,14 @@ public:
             std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
             std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
-            out << "Final eigenvector" << std::endl;
-            for(pi=0; pi<6; pi++)
-                out << V_best[pi] << " ";
-            for(pi=0; pi<3; pi++)
-                out << 0 << " ";
-            out << std::endl;
-            out << "==============================" << std::endl;
             break;
         case 3:
-            V[0] = V[1] = V[2] = 0;
             std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
             std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
             std::copy(V_best+6, V_best+9, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
-            out << "Final eigenvector" << std::endl;
-            for(pi=0; pi<9; pi++)
-                out << V_best[pi] << " ";
-            out << std::endl;
-            out << "==============================" << std::endl;
             break;
         }
-        num_fibers[data.voxel_index] = e_min_index;
+        num_fibers[data.voxel_index] = min_index;
 
         // DTI
         if (data.space.front() != 0.0)
@@ -641,10 +636,10 @@ public:
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
 
+        out.close();
         delete [] x;
         delete [] xstar;
         delete [] mydata.x;
-        out.close();
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
