@@ -228,10 +228,11 @@ public:
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-3;
-        opts[1] = opts[2] = 1E-8;
-        opts[3] = 1E-8;
-        opts[4] = 1E-3;
+        opts[0] = 1E-12;
+        opts[1] = 1E-6;
+        opts[2] = 1E-5;
+        opts[3] = 1E-2;
+        opts[4] = 1E-2;
         float *x = new float[64];
         float *xstar = new float[64];
         UserData mydata;
@@ -377,6 +378,14 @@ public:
 
             }
 
+           // float temper[64] = {0.5374,0.3333,0.2517,0.1633,0.3197,0.4082,0.5374,0.3197,0.3265,0.3333,0.2925
+                            //    ,0.3129,0.6463,0.5646,0.3129,0.5374,0.5578,0.6599,0.6054,0.4898,0.4898,0.7687,0.8844,0.5646
+                               // ,0.6667,0.7891,0.6463,0.5442,0.5986,0.8776,0.7211,0.6599,0.7415,0.6531,0.6327,0.6939
+                              //  ,0.8027,0.5442,0.3469,0.6871,0.8639,0.5986,0.6395,0.4762,0.7075,0.6463,0.6939,0.4422,0.3197,0.6327,0.4830,0.4082
+                             //   ,0.6395,0.2993,0.2993,0.3061,0.2857,0.4830,0.4830,0.3401,0.3946,0.3673,0.1293,0.1701};
+            //for(n=0;n<b_count; n++)
+                //mixedSig(4,n) = temper[n];
+
             for(n=0; n<b_count; n++)
             {
                 x[n] = mixedSig(4,n);
@@ -388,7 +397,7 @@ public:
             case 0: // zero sticks
                 par[0] = lambda;
                 mydata.n = 0;
-                result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                result = slevmar_bc_dif(&cost_function, par, x, 1, b_count, p_min0, p_max0, NULL, 10, opts, info, NULL, NULL, (void*)&mydata);
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
@@ -398,6 +407,7 @@ public:
                 }
                 break;
             case 1: // one stick
+
                 fractions[1] *= 0.8;
                 fractions[0] = 1-fractions[1];
                 par[0] = fractions[0];
@@ -405,8 +415,14 @@ public:
                 for(n=0; n<3; n++)
                     par[n+2] = eigenvectors[n];
                 par[5] = lambda;
+                //par[0] = 0.5334;
+                //par[1] = 0.4666;
+                //par[2] = -0.9854;
+                //par[3] = -0.1233;
+                //par[4] = 0.1170;
+                //par[5] = 0.0015;
                 mydata.n = 1;
-                result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, 10, opts, info, NULL, NULL, (void*)&mydata);
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+6*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
@@ -427,7 +443,7 @@ public:
                     par[n+3] = eigenvectors[n];
                 par[9] = lambda;
                 mydata.n = 2;
-                result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, 10, opts, info, NULL, NULL, (void*)&mydata);
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
@@ -449,7 +465,7 @@ public:
                     par[n+4] = eigenvectors[n];
                 par[13] = lambda;
                 mydata.n = 3;
-                result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 100, opts, info, NULL, NULL, (void*)&mydata);
+                result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, 10, opts, info, NULL, NULL, (void*)&mydata);
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+14*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
