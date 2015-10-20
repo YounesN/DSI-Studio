@@ -102,7 +102,8 @@ HEADERS += mainwindow.h \
     dicom/motion_dialog.hpp \
     libs/dsi/ica_process.hpp \
     libs/dsi/sig_process.hpp \
-    libs/dsi/icabsm_process.hpp
+    libs/dsi/icabsm_process.hpp \
+    libs/dsi/icaidsi_process.hpp
 
 FORMS += mainwindow.ui \
     tracking/tracking_window.ui \
