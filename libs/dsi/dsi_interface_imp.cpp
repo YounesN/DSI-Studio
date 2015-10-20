@@ -674,12 +674,3 @@ const char* odf_average(const char* out_name,const char* const * file_names,unsi
     output_odfs(mask,out_name,".mean.fib.gz",odfs,ti,vs,mni,report,false);
     return 0;
 }
-
-
-
-
-
-
-
-
-
