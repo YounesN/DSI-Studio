@@ -565,24 +565,12 @@ public:
                 par[13] = lambda;
 
                 mydata.n = 3; maxIteration = 20*14;
-                //float xtmp[64] = {0.5374,0.3333,0.2517,0.1633,0.3197,0.4082,0.5374,0.3197,0.3265,0.3333,0.2925,0.3129,0.6463,0.5646,0.3129,0.5374,0.5578
-                //    ,0.6599,0.6054,0.4898,0.4898,0.7687,0.8844,0.5646,0.6667,0.7891,0.6463,0.5442,0.5986,0.8776,0.7211,0.6599,0.7415,0.6531
-                //    ,0.6327,0.6939,0.8027,0.5442,0.3469,0.6871,0.8639,0.5986,0.6395,0.4762,0.7075,0.6463,0.6939,0.4422,0.3197,0.6327,0.4830
-                //    ,0.4082,0.6395,0.2993,0.2993,0.3061,0.2857,0.4830,0.4830,0.3401,0.3946,0.3673,0.1293,0.1701};
-                //float partmp[14] = {0.2505,0.2523,0.2543,0.2429,-0.6732,-0.1339,0.7272,-0.9833,-0.1618,0.0838,-0.4323,0.8999,0.0572,0.0015};
-
-                //printToFile(out, partmp, 14, "Par");
-                //printToFile(out, xtmp, b_count, "X");
 
                 result = slevmar_blec_dif(&cost_function, partmp, xtmp, 14, b_count, p_min3, p_max3, A3, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
 
-                //printToFile(out, partmp, 14, "Par-Hat");
-                //printToFile(out, xtmp, b_count, "X-Hat");
-                //printToFile(out, info, 10, "info");
-                //printToFile(out, SC+3, 1, "SC");
-
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+14*logf(b_count)/b_count;
+                //printToFile(out, SC+3, 1, "SC");
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
@@ -787,6 +775,15 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
     }
     else
     {
+        for(i=0; i<BDi.size(); i++)
+        {
+            for (j=0; j<L; j++)
+            {   h_x[i] += p[j]*expf(-b_values[i]*D[j]);
+            }
+           data->x[i] = hx[i];
+        }
+
+
         lamb = p[1];
         memset(Dm, 0, 9*sizeof(float));
         Dm[0] = Dm[4] = Dm[8] = 1.0f;

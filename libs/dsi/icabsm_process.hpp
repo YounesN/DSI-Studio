@@ -14,7 +14,7 @@ using namespace std;
 
 struct UserData {
     int n;
-    arma::mat *matd_g;
+    arma::mat matd_g;
     float *x;
 };
 
@@ -44,10 +44,9 @@ private:
     float p_max3[14];
     float A0[2];
     float A1[6];
-    float B1[1];
     float A2[10];
     float A3[14];
-
+    float B1[1];
 
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
@@ -119,26 +118,21 @@ public:
         num_fibers.clear();
         num_fibers.resize(voxel.dim.size());
 
-
-        p_min0[0] = 0.05f; p_min0[1] = 0.0010f;
-        p_max0[0] = 0.95f; p_max0[1] = 0.0020f;
-        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f; p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = 0.0010f;
-        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f; p_max1; p_max1[3] = 1.0f; p_max1[4] = 1.0f; p_max1[5] = 0.0020f;
-        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f; p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f;
-        p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = 0.0010f;
-        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f; p_max2[3] = 1.0f; p_max2[4] = 1.0f; p_max2[5] = 1.0f; p_max2[6] = 1.0f;
-        p_max2[7] = 1.0f; p_max2[8] = 1.0f; p_max2[9] = 0.0020f;
-        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f; p_min3[3] = 0.05f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f;
-        p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = 0.0010f;
-        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f; p_max3[3] = 0.95f; p_max3[4] = 1.0f; p_max3[5] = 1.0f; p_max3[6] = 1.0f;
-        p_max3[7] = 1.0f; p_max3[8] = 1.0f; p_max3[9] = 1.0f; p_max3[10] = 1.0f; p_max3[11] = 1.0f; p_max3[12] = 1.0f; p_max3[13] = 0.0020f;
+        p_min0[0] = 0.00f; p_min0[1] = 0.0010f;
+        p_max0[0] = 1.00f; p_max0[1] = 0.0020f;
+        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f;  p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = 0.0010f;
+        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f;   p_max1[3] = 1.0f;  p_max1[4] = 1.0f;  p_max1[5] = 0.0020f;
+        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f;  p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f; p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = 0.0010f;
+        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f;  p_max2[3] = 1.0f;  p_max2[4] = 1.0f;  p_max2[5] = 1.0f;  p_max2[6] = 1.0f;  p_max2[7] = 1.0f;  p_max2[8] = 1.0f;  p_max2[9] = 0.0020f;
+        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f;  p_min3[3] = 0.01f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f; p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = 0.0010f;
+        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f;  p_max3[3] = 0.99f; p_max3[4] = 1.0f;  p_max3[5] = 1.0f;  p_max3[6] = 1.0f;  p_max3[7] = 1.0f;  p_max3[8] = 1.0f;  p_max3[9] = 1.0f;  p_max3[10] = 1.0f;  p_max3[11] = 1.0f;  p_max3[12] = 1.0f;  p_max3[13] = 0.0020f;
 
         A0[0] = 1.0f; A0[1] = 0.0f;
-        A1[0] = 1.0f; A1[2] = 1.0f; A1[3] = 0.0f; A1[4] = 0.0f; A1[5] = 0.0f; B1[0] = 1.0f;
-        A2[0] = 1.0f; A2[1] = 1.0f; A2[3] = 1.0f; A2[3] = 0.0f; A2[4] = 0.0f; A2[5] = 0.0f; A2[6] = 0.0f;
-        A2[7] = 0.0f; A2[8] = 0.0f; A2[9] = 0.0f;
-        A3[0] = 1.0f; A3[1] = 1.0f; A3[2] = 1.0f; A3[3] = 1.0f; A3[4] = 0.0f; A3[5] = 0.0f; A3[6] = 0.0f;
-        A3[7] = 0.0f; A3[8] = 0.0f; A3[9] = 0.0f; A3[10] =0.0f; A3[11] = 0.0f; A3[12] = 0.0f; A3[13] = 0.0f;
+        A1[0] = 1.0f; A1[1] = 1.0f; A1[2] = 0.0f; A1[3] = 0.0f; A1[4] = 0.0f; A1[5] = 0.0f;
+        A2[0] = 1.0f; A2[1] = 1.0f; A2[2] = 1.0f; A2[3] = 0.0f; A2[4] = 0.0f; A2[5] = 0.0f; A2[6] = 0.0f; A2[7] = 0.0f; A2[8] = 0.0f; A2[9] = 0.0f;
+        A3[0] = 1.0f; A3[1] = 1.0f; A3[2] = 1.0f; A3[3] = 1.0f; A3[4] = 0.0f; A3[5] = 0.0f; A3[6] = 0.0f; A3[7] = 0.0f; A3[8] = 0.0f; A3[9] = 0.0f; A3[10] =0.0f; A3[11] = 0.0f; A3[12] = 0.0f; A3[13] = 0.0f;
+
+        B1[0] = 1.0f;
 
         approach = FICA_APPROACH_SYMM;
         g = FICA_NONLIN_TANH;
@@ -220,12 +214,12 @@ public:
         // ICA
         unsigned int i=0,j=0,k=0,m=0,n=0;
         /* get 3d position */
-        unsigned int index = data.voxel_index;
-        k = (unsigned int) index / (voxel.dim.h * voxel.dim.w);
-        index -= k * voxel.dim.h * voxel.dim.w;
+        i = data.voxel_index;
+        k = (unsigned int) i / (voxel.dim.h * voxel.dim.w);
+        i -= k * voxel.dim.h * voxel.dim.w;
 
-        j = (unsigned int) index / voxel.dim.w;
-        index -= j * voxel.dim.w;
+        j = (unsigned int) i / voxel.dim.w;
+        i -= j * voxel.dim.w;
 
         if(threeDim)
         {
@@ -244,27 +238,19 @@ public:
             // current flat 9 voxels
             if(i > 0 && j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 5);
-
             if(j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w], 6);
-
             if(i < voxel.dim.w - 1 && j > 0 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w+1], 7);
-
             if(i > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-1], 8);
-
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index], 9);
-
             if(i < voxel.dim.w - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+1], 10);
-
             if(i > 0 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w-1], 11);
-
             if(j < voxel.dim.h - 1 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w], 12);
-
             if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 13);
 
@@ -284,27 +270,19 @@ public:
         {
             if(i > 0 && j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 0);
-
             if(j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w], 1);
-
             if(i < voxel.dim.w - 1 && j > 0 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w+1], 2);
-
             if(i > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-1], 3);
-
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index], 4);
-
             if(i < voxel.dim.w - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+1], 5);
-
             if(i > 0 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w-1], 6);
-
             if(j < voxel.dim.h - 1 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w], 7);
-
             if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 8);
         }
@@ -316,23 +294,28 @@ public:
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-3;  // mu
+        opts[0] = 1E-6;   // mu
         opts[1] = 1E-15;
-        opts[2] = 1E-15; // |dp|^2
-        opts[3] = 1E-1;  // |e|^2
-        opts[4] = 1E-06; // delta, step used in difference approximation to the Jacobian
+        opts[2] = 1E-15;  // |dp|^2
+        opts[3] = 1E-15;  // |e|^2
+        opts[4] = 1E-15;  //  delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
+        float *weight0 = new float[b_count];
+        float *weight1 = new float[b_count];
+        float *weight2 = new float[b_count];
+        float *weight3 = new float[b_count];
         float *xstar = new float[b_count];
         UserData mydata;
         mydata.x = new float[b_count];
-        mydata.matd_g = &voxel.matg_dg;
+        mydata.matd_g = voxel.matg_dg;
         float e[4]={0};
         float SC[4] = {0};
         float SC_min=1E+15;
         float V_best[9];
         float F_best[3];
         int result;
-        int maxIteration = 200;
+        int maxIteration;
+        int niter = 20;
 
         // ICA variables
         arma::mat tensor_param(6,1);
@@ -340,6 +323,41 @@ public:
         double V[9],d[3];
         std::vector<float> signal(b_count);
         std::vector<float> w(3);
+
+        // DTI
+        if (data.space.front() != 0.0)
+        {
+            float logs0 = std::log(std::max<float>(1.0,data.space.front()));
+            for (unsigned int i = 1; i < data.space.size(); ++i)
+                signal[i-1] = std::max<float>(0.0,logs0-std::log(std::max<float>(1.0,data.space[i])));
+        }
+
+        arma::mat matsignal(b_count,1);
+        set_arma_col(matsignal, signal, 0);
+        arma::mat pos_invg_dg = -voxel.matinvg_dg;
+        tensor_param = pos_invg_dg * matsignal;
+
+        unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
+        for(unsigned int index = 0; index < 9; index++)
+            tensor[index] = tensor_param(tensor_index[index],0);
+        image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
+        if (d[1] < 0.0)
+        {
+            d[1] = 0.0;
+            d[2] = 0.0;
+        }
+        if (d[2] < 0.0)
+            d[2] = 0.0;
+        if (d[0] < 0.0)
+        {
+            d[0] = 0.0;
+            d[1] = 0.0;
+            d[2] = 0.0;
+        }
+        data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
+        md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
+        d0[data.voxel_index] = 1000.0*d[0];
+        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
 
         for(ica_num = 0; ica_num <=3; ica_num++)
         {
@@ -481,36 +499,70 @@ public:
                 x[n] = mixedSig(center_voxel,n);
                 xstar[n] = mixedSig(center_voxel,n);
                 mydata.x[n] = mixedSig(center_voxel,n);
+                weight0[n]= (b_count-2+1)/(x[n]*x[n]);
+                weight1[n]= (b_count-6+1)/(x[n]*x[n]);
+                weight2[n]= (b_count-10+1)/(x[n]*x[n]);
+                weight3[n]= (b_count-14+1)/(x[n]*x[n]);
             }
+
+            //float xtmp[64] = {0.5374,0.3333,0.2517,0.1633,0.3197,0.4082,0.5374,0.3197,0.3265,0.3333,0.2925,0.3129,0.6463,0.5646,0.3129,0.5374,0.5578,0.6599,0.6054,0.4898,0.4898,0.7687,0.8844,0.5646,0.6667,0.7891,0.6463,0.5442,0.5986,0.8776,0.7211,0.6599,0.7415,0.6531,0.6327,0.6939,0.8027,0.5442,0.3469,0.6871,0.8639,0.5986,0.6395,0.4762,0.7075,0.6463,0.6939,0.4422,0.3197,0.6327,0.4830,0.4082,0.6395,0.2993,0.2993,0.3061,0.2857,0.4830,0.4830,0.3401,0.3946,0.3673,0.1293,0.1701};
+            //float partmp0[2] =  {0.8445,    0.0015};
+            //float partmp1[6] =  {0.5334,    0.4666,   -0.9854,   -0.1233,    0.1170,    0.0015};
+            //float partmp2[10] = {0.3424,    0.3343,    0.3234,   -0.9279,    0.2011,   -0.3140,   -0.9716,   -0.1487,    0.1840,    0.0015};
+            //float partmp3[14] = {0.2505,    0.2523,    0.2543,    0.2429,   -0.6732,   -0.1339,    0.7272,   -0.9833,   -0.1618,    0.0838, -0.4323,    0.8999,    0.0572,    0.0015};
 
             switch(ica_num)
             {
             case 0: // zero sticks
-                par[0] = 0.50f;
+                par[0] = 0.5f;
                 par[1] = lambda;
-                mydata.n = 0; maxIteration = 20*2;
-                result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                mydata.n = 0; maxIteration = niter*1;
+
+                //printToFile(out, partmp0, 2, "Par 0");
+                //printToFile(out, xtmp, b_count, "X");
+
+                result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, weight0, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //result = slevmar_bc_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //printToFile(out, partmp0, 2, "Par-Hat");
+                //printToFile(out, xtmp, b_count, "X-Hat");
+                //printToFile(out, info, 10, "info");
+                //printToFile(out, SC, 1, "SC");
+
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+2*logf(b_count)/b_count;
-                if(SC_min > SC[ica_num])
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                if (SC_min > SC[ica_num]) //&& (data.fa[0] <= 0.10))
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
                 }
                 break;
             case 1: // one stick
-                fractions[1] = 0.50f; //fractions[1] *= 0.95;
+                fractions[1] = 0.5f; //fractions[1] *= 0.95;
                 fractions[0] = 1-fractions[1];
                 par[0] = fractions[0];
                 par[1] = fractions[1];
 
                 for(n=0; n<3; n++)
-                    par[n+2] = eigenvectors[n];
+                {    par[n+2] = eigenvectors[n];
+                     p_min1[n+2] = std::min<float>(par[n+2]*0.9f,par[n+2]*1.1f);
+                     p_max1[n+2] = std::max<float>(par[n+2]*0.9f,par[n+2]*1.1f);
+                }
 
                 par[5] = lambda;
 
-                mydata.n = 1; maxIteration = 20*6;
-                result = slevmar_blec_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, A1, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                mydata.n = 1; maxIteration = niter*6;
+
+                //printToFile(out, partmp1, 6, "Par 1");
+                //printToFile(out, xtmp, b_count, "X");
+
+
+                result = slevmar_blec_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, A1, B1, 1, weight1, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //result = slevmar_bc_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //printToFile(out, partmp1, 6, "Par-Hat");
+                //printToFile(out, xtmp, b_count, "X-Hat");
+                //printToFile(out, info, 10, "info");
+                //printToFile(out, SC+1, 1, "SC");
+
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+6*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
@@ -531,12 +583,25 @@ public:
                     par[n] = fractions[n];
 
                 for(n=0; n<6; n++)
-                    par[n+3] = eigenvectors[n];
+                {    par[n+3] = eigenvectors[n];
+                    p_min3[n+2] = std::min<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                    p_max3[n+2] = std::max<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                }
 
                 par[9] = lambda;
 
-                mydata.n = 2; maxIteration = 20*10;
-                result = slevmar_blec_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, A2, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                mydata.n = 2; maxIteration = niter*10;
+
+                //printToFile(out, partmp2, 10, "Par 2");
+                //printToFile(out, xtmp, b_count, "X");
+
+                result = slevmar_blec_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, A2, B1, 1, weight2, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //result = slevmar_bc_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //printToFile(out, partmp2, 10, "Par-Hat");
+                //printToFile(out, xtmp, b_count, "X-Hat");
+                //printToFile(out, info, 10, "info");
+                //printToFile(out, SC+2, 1, "SC");
+
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
@@ -558,25 +623,22 @@ public:
                 for(n=0; n<4; n++) // copy fractions to par.
                     par[n] = fractions[n];
 
-
                 for(n=0; n<9; n++) // copy eigenvectors to par.
-                    par[n+4] = eigenvectors[n];
+                {    par[n+4] = eigenvectors[n];
+                    p_min3[n+2] = std::min<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                    p_max3[n+2] = std::max<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                }
 
                 par[13] = lambda;
 
-                mydata.n = 3; maxIteration = 20*14;
-                //float xtmp[64] = {0.5374,0.3333,0.2517,0.1633,0.3197,0.4082,0.5374,0.3197,0.3265,0.3333,0.2925,0.3129,0.6463,0.5646,0.3129,0.5374,0.5578
-                //    ,0.6599,0.6054,0.4898,0.4898,0.7687,0.8844,0.5646,0.6667,0.7891,0.6463,0.5442,0.5986,0.8776,0.7211,0.6599,0.7415,0.6531
-                //    ,0.6327,0.6939,0.8027,0.5442,0.3469,0.6871,0.8639,0.5986,0.6395,0.4762,0.7075,0.6463,0.6939,0.4422,0.3197,0.6327,0.4830
-                //    ,0.4082,0.6395,0.2993,0.2993,0.3061,0.2857,0.4830,0.4830,0.3401,0.3946,0.3673,0.1293,0.1701};
-                //float partmp[14] = {0.2505,0.2523,0.2543,0.2429,-0.6732,-0.1339,0.7272,-0.9833,-0.1618,0.0838,-0.4323,0.8999,0.0572,0.0015};
+                mydata.n = 3; maxIteration = niter*14;
 
-                //printToFile(out, partmp, 14, "Par");
+                //printToFile(out, partmp3, 14, "Par 3");
                 //printToFile(out, xtmp, b_count, "X");
 
-                result = slevmar_blec_dif(&cost_function, partmp, xtmp, 14, b_count, p_min3, p_max3, A3, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
-
-                //printToFile(out, partmp, 14, "Par-Hat");
+                result = slevmar_blec_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, A3, B1, 1, weight3, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //result = slevmar_bc_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //printToFile(out, partmp3, 14, "Par-Hat");
                 //printToFile(out, xtmp, b_count, "X-Hat");
                 //printToFile(out, info, 10, "info");
                 //printToFile(out, SC+3, 1, "SC");
@@ -637,7 +699,7 @@ public:
         }
         num_fibers[data.voxel_index] = min_index;
 
-        // DTI
+        /* DTI
         if (data.space.front() != 0.0)
         {
             float logs0 = std::log(std::max<float>(1.0,data.space.front()));
@@ -670,9 +732,13 @@ public:
         data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
         md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
         d0[data.voxel_index] = 1000.0*d[0];
-        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
+        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0; */
 
         //out.close();
+        delete [] weight0;
+        delete [] weight1;
+        delete [] weight2;
+        delete [] weight3;
         delete [] x;
         delete [] xstar;
         delete [] mydata.x;
@@ -711,7 +777,7 @@ void flat_matrix(arma::mat &mat, std::vector<float>& v)
 void cost_function(float *p, float *hx, int m, int n, void *adata)
 {
     UserData * data = (UserData *)adata;
-    arma::mat matd_g = *data->matd_g;
+    arma::mat matd_g = data->matd_g;
     float lamb = 0.0f;
     float evectors[9] = {0};
     float Dm[9] = {0};
