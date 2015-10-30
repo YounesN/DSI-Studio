@@ -98,6 +98,7 @@ private slots:
     void on_add_t1t2_clicked();
     void on_actionManual_Rotation_triggered();
     void on_ICA_toggled(bool checked);
+    void on_IDSI_toggled(bool checked);
 };
 
 #endif // RECONSTRUCTION_WINDOW_H

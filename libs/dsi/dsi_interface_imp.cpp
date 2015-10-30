@@ -17,6 +17,7 @@
 #include "sig_process.hpp"
 #include "ica_process.hpp"
 #include "icabsm_process.hpp"
+#include "icaidsi_process.hpp"
 #include "dsi_process.hpp"
 #include "qbi_process.hpp"
 #include "sh_process.hpp"
@@ -41,6 +42,11 @@ typedef boost::mpl::vector<
     ReadDWIData,
     ICABSM
 > ica_process;
+
+typedef boost::mpl::vector<
+    ReadDWIData,
+    ICAIDSI
+> idsi_process;
 
 
 template<typename reco_type>
@@ -432,11 +438,20 @@ const char* reconstruction(ImageModel* image_model,
             break;
         case 8:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
-            out << ".ica.fib.gz";
+            out << ".ica.bsm.fib.gz";
             image_model->voxel.max_fiber_number = 3;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
             if (!image_model->reconstruct<ica_process>(thread_count))
+                return "reconstruction canceled";
+            break;
+        case 9:
+            image_model->voxel.recon_report << " The diffusion tensor was calculated.";
+            out << ".ica.idsi.fib.gz";
+            image_model->voxel.max_fiber_number = 3;
+            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+                return "pre-reconstruction canceled";
+            if (!image_model->reconstruct<idsi_process>(thread_count))
                 return "reconstruction canceled";
             break;
         }

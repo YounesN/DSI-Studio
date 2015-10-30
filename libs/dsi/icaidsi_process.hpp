@@ -1,5 +1,5 @@
-#ifndef ICABSM_PROCESS_HPP
-#define ICABSM_PROCESS_HPP
+#ifndef ICAIDSI_PROCESS_HPP
+#define ICAIDSI_PROCESS_HPP
 #include <cmath>
 #include "basic_voxel.hpp"
 #include "image/image.hpp"
@@ -12,15 +12,16 @@
 
 using namespace std;
 
-struct UserData {
+struct UserDataIDSI {
     int n;
-    arma::mat *matd_g;
+    arma::mat matd_g;
+    std::vector<std::vector<float>> d_gradient;
     float *x;
 };
 
-void cost_function(float *p, float *hx, int m, int n, void *adata);
+void cost_function_idsi(float *p, float *hx, int m, int n, void *adata);
 
-class ICABSM : public BaseProcess
+class ICAIDSI : public BaseProcess
 {
 private:
     int approach, numOfIC, g, initState;
@@ -33,21 +34,20 @@ private:
     std::vector<float> md;
     std::vector<float> num_fibers;
 
-    // BSM variables
-    float p_min0[2];
-    float p_max0[2];
-    float p_min1[6];
-    float p_max1[6];
-    float p_min2[10];
-    float p_max2[10];
-    float p_min3[14];
-    float p_max3[14];
-    float A0[2];
-    float A1[6];
-    float A2[10];
-    float A3[14];
+    // IDSI boundry variables
+    float p_min0[4];
+    float p_max0[4];
+    float p_min1[10];
+    float p_max1[10];
+    float p_min2[16];
+    float p_max2[16];
+    float p_min3[22];
+    float p_max3[22];
+    float A0[4];
+    float A1[10];
+    float A2[16];
+    float A3[22];
     float B1[1];
-
 
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
@@ -106,6 +106,13 @@ private:
         out << std::endl;
     }
 
+    void setFloatValue(float *arr, float value, int size)
+    {
+        int i;
+        for(i=0; i<size; i++)
+            arr[i] = value;
+    }
+
 public:
     virtual void init(Voxel& voxel)
     {
@@ -119,26 +126,54 @@ public:
         num_fibers.clear();
         num_fibers.resize(voxel.dim.size());
 
+        float min_fraction = 0.05f; // minimum value of fractions
+        float max_fraction = 0.95;  // maximum value of fractions
+        float min_lambda = 0.0010f; // minimum value of lambda
+        float max_lambda = 0.0020f; // maximum value of lambda
+        float min_vector = -1.0f;   // minimum value of eigenvector
+        float max_vector = 1.0f;    // maximum value of eigenvector
 
-        p_min0[0] = 0.05f; p_min0[1] = 0.0010f;
-        p_max0[0] = 0.95f; p_max0[1] = 0.0020f;
-        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f; p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = 0.0010f;
-        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f; p_max1; p_max1[3] = 1.0f; p_max1[4] = 1.0f; p_max1[5] = 0.0020f;
-        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f; p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f;
-        p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = 0.0010f;
-        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f; p_max2[3] = 1.0f; p_max2[4] = 1.0f; p_max2[5] = 1.0f; p_max2[6] = 1.0f;
-        p_max2[7] = 1.0f; p_max2[8] = 1.0f; p_max2[9] = 0.0020f;
-        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f; p_min3[3] = 0.05f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f;
-        p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = 0.0010f;
-        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f; p_max3[3] = 0.95f; p_max3[4] = 1.0f; p_max3[5] = 1.0f; p_max3[6] = 1.0f;
-        p_max3[7] = 1.0f; p_max3[8] = 1.0f; p_max3[9] = 1.0f; p_max3[10] = 1.0f; p_max3[11] = 1.0f; p_max3[12] = 1.0f; p_max3[13] = 0.0020f;
+        // setFloatValue ( array to copy, the value, size of array )
+        setFloatValue(p_min0, min_fraction, 4);
+        setFloatValue(p_max0, max_fraction, 4);
 
-        A0[0] = 1.0f; A0[1] = 0.0f;
-        A1[0] = 1.0f; A1[2] = 1.0f; A1[3] = 0.0f; A1[4] = 0.0f; A1[5] = 0.0f; B1[0] = 1.0f;
-        A2[0] = 1.0f; A2[1] = 1.0f; A2[3] = 1.0f; A2[3] = 0.0f; A2[4] = 0.0f; A2[5] = 0.0f; A2[6] = 0.0f;
-        A2[7] = 0.0f; A2[8] = 0.0f; A2[9] = 0.0f;
-        A3[0] = 1.0f; A3[1] = 1.0f; A3[2] = 1.0f; A3[3] = 1.0f; A3[4] = 0.0f; A3[5] = 0.0f; A3[6] = 0.0f;
-        A3[7] = 0.0f; A3[8] = 0.0f; A3[9] = 0.0f; A3[10] =0.0f; A3[11] = 0.0f; A3[12] = 0.0f; A3[13] = 0.0f;
+        setFloatValue(p_min1, min_fraction, 5);
+        setFloatValue(p_min1+5, min_vector, 3);
+        setFloatValue(p_min1+8, min_lambda, 2);
+        setFloatValue(p_max1, max_fraction, 5);
+        setFloatValue(p_max1+5, max_vector, 3);
+        setFloatValue(p_max1+8, max_lambda, 2);
+
+        setFloatValue(p_min2, min_fraction, 6);
+        setFloatValue(p_min2+6, min_vector, 6);
+        setFloatValue(p_min2+12, min_lambda, 4);
+        setFloatValue(p_max2, max_fraction, 6);
+        setFloatValue(p_max2+6, max_vector, 6);
+        setFloatValue(p_max2+12, max_lambda, 4);
+
+        setFloatValue(p_min3, min_fraction, 7);
+        setFloatValue(p_min3+7, min_vector, 9);
+        setFloatValue(p_min3+16, min_lambda, 6);
+        setFloatValue(p_max3, max_fraction, 7);
+        setFloatValue(p_max3+7, max_vector, 9);
+        setFloatValue(p_max3+16, max_lambda, 6);
+
+        // first initialize with zero
+        memset(A0, 0, 4 * sizeof(float));
+        memset(A1, 0, 10 * sizeof(float));
+        memset(A2, 0, 16 * sizeof(float));
+        memset(A3, 0, 22 * sizeof(float));
+
+        for(m=0; m<4; m++)
+            A0[m] = 1.0f;
+        for(m=0; m<5; m++)
+            A1[m] = 1.0f;
+        for(m=0; m<6; m++)
+            A2[m] = 1.0f;
+        for(m=0; m<7; m++)
+            A3[m] = 1.0f;
+
+        B1[0] = 1.0f;
 
         approach = FICA_APPROACH_SYMM;
         g = FICA_NONLIN_TANH;
@@ -226,6 +261,7 @@ public:
 
         j = (unsigned int) index / voxel.dim.w;
         index -= j * voxel.dim.w;
+        i -= j * voxel.dim.w;
 
         if(threeDim)
         {
@@ -244,27 +280,19 @@ public:
             // current flat 9 voxels
             if(i > 0 && j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 5);
-
             if(j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w], 6);
-
             if(i < voxel.dim.w - 1 && j > 0 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w+1], 7);
-
             if(i > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-1], 8);
-
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index], 9);
-
             if(i < voxel.dim.w - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+1], 10);
-
             if(i > 0 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w-1], 11);
-
             if(j < voxel.dim.h - 1 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w], 12);
-
             if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 13);
 
@@ -284,55 +312,59 @@ public:
         {
             if(i > 0 && j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w-1], 0);
-
             if(j > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w], 1);
-
             if(i < voxel.dim.w - 1 && j > 0 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-voxel.dim.w+1], 2);
-
             if(i > 0)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index-1], 3);
-
             set_mat_row(mixedSig, voxel.signalData[data.voxel_index], 4);
-
             if(i < voxel.dim.w - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+1], 5);
-
             if(i > 0 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w-1], 6);
-
             if(j < voxel.dim.h - 1 )
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w], 7);
-
             if(i < voxel.dim.w - 1 && j < voxel.dim.h - 1)
                 set_mat_row(mixedSig, voxel.signalData[data.voxel_index+voxel.dim.w+1], 8);
         }
 
         // BSM variables
-        float par[14];
-        float lambda = 0.0015f;
+        float par[22];
+        float lambda = 0.0015;
         float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-3;  // mu
+        opts[0] = 1E-6;    // mu
         opts[1] = 1E-15;
-        opts[2] = 1E-15; // |dp|^2
-        opts[3] = 1E-1;  // |e|^2
-        opts[4] = 1E-06; // delta, step used in difference approximation to the Jacobian
+        opts[2] = 1E-15;   // |dp|^2
+        opts[3] = 1E-15;   // |e|^2
+        opts[4] = 1E-15;   // delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
         float *xstar = new float[b_count];
-        UserData mydata;
+        UserDataIDSI mydata;
         mydata.x = new float[b_count];
-        mydata.matd_g = &voxel.matg_dg;
-        float e[4]={0};
+        mydata.matd_g = voxel.matg_dg;
+        mydata.d_gradient.clear();
+        mydata.d_gradient.resize(b_count);
+        for(m=0; m<b_count; m++)
+        {
+            image::vector<3> tmp = voxel.bvectors[m];
+            std::vector<float> vtmp;
+            vtmp.push_back(tmp[0]);
+            vtmp.push_back(tmp[1]);
+            vtmp.push_back(tmp[2]);
+            mydata.d_gradient.push_back(vtmp);
+        }
+        float e[4] = {0};
         float SC[4] = {0};
-        float SC_min=1E+15;
+        float SC_min = 1E+15;
         float V_best[9];
         float F_best[3];
         int result;
-        int maxIteration = 200;
+        int maxIteration;
+        int niter = 20;
 
         // ICA variables
         arma::mat tensor_param(6,1);
@@ -478,113 +510,94 @@ public:
 
             for(n=0; n<b_count; n++)
             {
-                x[n] = mixedSig(center_voxel,n);
-                xstar[n] = mixedSig(center_voxel,n);
-                mydata.x[n] = mixedSig(center_voxel,n);
+                x[n] = mixedSig(center_voxel, n);
+                xstar[n] = mixedSig(center_voxel, n);
+                mydata.x[n] = mixedSig(center_voxel, n);
             }
-
             switch(ica_num)
             {
-            case 0: // zero sticks
-                par[0] = 0.50f;
-                par[1] = lambda;
-                mydata.n = 0; maxIteration = 20*2;
-                result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+            case 0: // zero source
+                for(n=0; n<4; n++)
+                    par[n] = 0.25f; // divide 1 between four isotropic fractions
+                mydata.n = 0;
+                maxIteration = niter * 4;
+                result = slevmar_blec_dif(&cost_function_idsi, par,
+                                          x, 4, b_count, p_min0, p_max0, A0, B1,
+                                          1, NULL, maxIteration, opts, info, NULL,
+                                          NULL, (void*)&mydata);
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+2*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
                 }
                 break;
-            case 1: // one stick
-                fractions[1] = 0.50f; //fractions[1] *= 0.95;
-                fractions[0] = 1-fractions[1];
-                par[0] = fractions[0];
-                par[1] = fractions[1];
-
-                for(n=0; n<3; n++)
-                    par[n+2] = eigenvectors[n];
-
-                par[5] = lambda;
-
-                mydata.n = 1; maxIteration = 20*6;
-                result = slevmar_blec_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, A1, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+            case 1: // one ica source
+                for(m=0; m<5; m++)
+                    par[m] = 1.0f/5;
+                for(m=0; m<3; m++)
+                    par[m+5] = eigenvectors[m];
+                for(m=8; m<10; m++)
+                    par[m] = lambda;
+                mydata.n = 1;
+                maxIteration = niter * 10;
+                result = slevmar_blec_dif(&cost_function_idsi, par,
+                                          x, 10, b_count, p_min1, p_max1, A1, B1,
+                                          1, NULL, maxIteration, opts, info, NULL,
+                                          NULL, (void*)&mydata);
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+6*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
-                    for(n=0; n<3; n++)
-                        V_best[n]=par[n+2];
                 }
                 break;
-            case 2: // two sticks
-                fractions[1] = 0.33f; //fractions[1] *= 0.95;
-                fractions[2] = 0.33f; //fractions[2] *= 0.95;
-                fractions[0] = 1-fractions[1]-fractions[2];
-
-                for(n=0; n<3; n++) // copy fractions to par.
-                    par[n] = fractions[n];
-
-                for(n=0; n<6; n++)
-                    par[n+3] = eigenvectors[n];
-
-                par[9] = lambda;
-
-                mydata.n = 2; maxIteration = 20*10;
-                result = slevmar_blec_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, A2, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+            case 2: // two ica sources
+                for(m=0; m<6; m++)
+                    par[m] = 1.0f/6;
+                for(m=0; m<6; m++)
+                    par[m+6] = eigenvectors[m];
+                for(m=12; m<16; m++)
+                    par[m] = lambda;
+                mydata.n = 2;
+                maxIteration = niter * 16;
+                result = slevmar_blec_dif(&cost_function_idsi, par,
+                                          x, 16, b_count, p_min2, p_max2, A2, B1,
+                                          1, NULL, maxIteration, opts, info, NULL,
+                                          NULL, (void*)&mydata);
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
-                    F_best[1] = par[2];
-                    for(n=0; n<6; n++)
-                        V_best[n]=par[n+3];
                 }
                 break;
-            case 3: // three sticks
-                fractions[1] = 0.25f; //fractions[1] *= 0.95;
-                fractions[2] = 0.25f; //fractions[2] *= 0.95;
-                fractions[3] = 0.25f; //fractions[3] *= 0.95;
-                fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
-
-                for(n=0; n<4; n++) // copy fractions to par.
-                    par[n] = fractions[n];
-
-
-                for(n=0; n<9; n++) // copy eigenvectors to par.
-                    par[n+4] = eigenvectors[n];
-
-                par[13] = lambda;
-
-                mydata.n = 3; maxIteration = 20*14;
-
-                result = slevmar_blec_dif(&cost_function, partmp, xtmp, 14, b_count, p_min3, p_max3, A3, B1, 1, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
-
+            case 3: // three ica sources
+                for(m=0; m<7; m++)
+                    par[m] = 1.0f/7;
+                for(m=0; m<9; m++)
+                    par[m+7] = eigenvectors[m];
+                for(m=16; m<22; m++)
+                    par[m] = lambda;
+                mydata.n = 3;
+                maxIteration = niter * 22;
+                result = slevmar_blec_dif(&cost_function_idsi, par,
+                                          x, 22, b_count, p_min3, p_max3, A3, B1,
+                                          1, NULL, maxIteration, opts, info, NULL,
+                                          NULL, (void*)&mydata);
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+14*logf(b_count)/b_count;
-                //printToFile(out, SC+3, 1, "SC");
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
-                    F_best[1] = par[2];
-                    F_best[2] = par[3];
-                    for(n=0; n<9; n++)
-                        V_best[n]=par[n+4];
                 }
                 break;
             }
         }
-
         switch(min_index)
         {
         case 0:
@@ -660,10 +673,6 @@ public:
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
 
-        //out.close();
-        delete [] x;
-        delete [] xstar;
-        delete [] mydata.x;
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
@@ -681,127 +690,58 @@ public:
     }
 };
 
-void flat_matrix(arma::mat &mat, std::vector<float>& v)
+void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
 {
-    int m, n, i, j;
-    m = mat.n_rows;
-    n = mat.n_cols;
-    v.clear();
-    for(i=0; i<m; i++)
+    // define variables
+    int i, j;
+    int l;
+    UserDataIDSI * data = (UserDataIDSI *) adata;
+    int N = data->n;
+    arma::mat theta;
+    arma::mat d_gradients;
+    arma::mat fractions;
+    arma::mat eigenvectors;
+    arma::mat lambdas;
+    arma::mat tmp;
+    arma::mat filledwithones(1, n, arma::fill::ones);
+
+    // assign values
+    for(i=0; i<3; i++)
     {
         for(j=0; j<n; j++)
         {
-            v.push_back(mat(i,j));
+            d_gradients(i,j) = data->d_gradient[j][i];
         }
     }
-}
 
-void cost_function(float *p, float *hx, int m, int n, void *adata)
-{
-    UserData * data = (UserData *)adata;
-    arma::mat matd_g = *data->matd_g;
-    float lamb = 0.0f;
-    float evectors[9] = {0};
-    float Dm[9] = {0};
-    float Vm[9] = {0};
-    float tmp1[9] = {0};
-    float T[9] = {0};
-    float Ds[18] = {0};
-    float Diso[6] = {0};
-    std::vector<float> BDi;
-    std::vector<float> BDs;
-    std::vector<float> expBDs;
-    std::vector<float> rhs;
-    std::vector<float> S;
-    std::vector<float> B;
-    int i = 0, j = 0;
-    int N = data->n;
-    unsigned int b_count = matd_g.n_rows;
-
-    BDi.clear();
-    BDi.resize(b_count);
-    BDs.clear();
-    BDs.resize(b_count*N);
-    expBDs.clear();
-    expBDs.resize(b_count*N);
-    rhs.clear();
-    rhs.resize(b_count);
-    S.clear();
-    S.resize(b_count);
-    B.clear();
-    for(i=0;i<3*N;i++)
-        evectors[i]=p[i+1+N];
-
-    if(N>=1)
+    switch(N)
     {
-        lamb = p[N*4+1];
-        for(i=0; i<N; i++)
-        {
-            memset(Dm, 0, 9*sizeof(float));
-            for(j=0; j<3; j++)
-                Dm[3*j] = evectors[i*3+j];
-            memset(Vm, 0, 9*sizeof(float));
-            Vm[0] = lamb;
-            memset(T, 0, 9*sizeof(float));
-            image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
-            image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
-            Ds[0*N+i] = T[0*3+0];
-            Ds[1*N+i] = T[1*3+1];
-            Ds[2*N+i] = T[2*3+2];
-            Ds[3*N+i] = T[0*3+1];
-            Ds[4*N+i] = T[0*3+2];
-            Ds[5*N+i] = T[1*3+2];
-        }
-        memset(Dm, 0, 9*sizeof(float));
-        Dm[0] = Dm[4] = Dm[8] = 1.0f;
-        memset(Vm, 0, 9*sizeof(float));
-        Vm[0] = Vm[4] = Vm[8] = lamb;
-        image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
-        image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
-        int tensor_index[6] = {0, 4, 8, 1, 2, 5};
-        for(i=0; i<6; i++)
-            Diso[i] = T[tensor_index[i]];
-        flat_matrix(matd_g, B);
-        image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
-        image::matrix::product(B.data(), Ds, BDs.data(), image::dyndim(b_count, 6), image::dyndim(6, N));
-        for(i=0; i<BDs.size(); i++)
-            expBDs[i] = expf(-1*BDs[i]);
-        image::matrix::product(expBDs.data(), p+1, rhs.data(), image::dyndim(b_count, N), image::dyndim(N, 1));
-        for(i=0; i<BDi.size(); i++)
-        {
-            hx[i] = p[0]*expf(-1*BDi[i])+rhs[i];
-            data->x[i] = hx[i];
-        }
+    case 1:
+        for(i=0; i<3; i++)
+            eigenvectors(0, i) = p[i+5];
+        break;
+    case 2:
+        for(i=0; i<3; i++)
+            eigenvectors(0, i) = p[i+6];
+        for(i=0; i<3; i++)
+            eigenvectors(1, i) = p[i+9];
+        break;
+    case 3:
+        for(i=0; i<3; i++)
+            eigenvectors(0, i) = p[i+7];
+        for(i=0; i<3; i++)
+            eigenvectors(1, i) = p[i+10];
+        for(i=0; i<3; i++)
+            eigenvectors(2, i) = p[i+13];
+        break;
     }
-    else
+
+    for(l=0; l<N; l++) // main loop
     {
-        for(i=0; i<BDi.size(); i++)
-        {
-            for (j=0; j<L; j++)
-            {   h_x[i] += p[j]*expf(-b_values[i]*D[j]);
-            }
-           data->x[i] = hx[i];
-        }
-
-
-        lamb = p[1];
-        memset(Dm, 0, 9*sizeof(float));
-        Dm[0] = Dm[4] = Dm[8] = 1.0f;
-        memset(Vm, 0, 9*sizeof(float));
-        Vm[0] = Vm[4] = Vm[8] = lamb;
-        image::matrix::product(Dm, Vm, tmp1, image::dyndim(3, 3), image::dyndim(3, 3));
-        image::matrix::product_transpose(tmp1, Dm, T, image::dyndim(3, 3), image::dyndim(3, 3));
-        int tensor_index[6] = {0, 4, 8, 1, 2, 5};
-        for(i=0; i<6; i++)
-            Diso[i] = T[tensor_index[i]];
-        flat_matrix(matd_g, B);
-        image::matrix::product(B.data(), Diso, BDi.data(), image::dyndim(b_count, 6), image::dyndim(6, 1));
-        for(i=0; i<BDi.size(); i++)
-        {
-            hx[i] = p[0]*expf(-1*BDi[i]);
-            data->x[i] = hx[i];
-        }
-    }
+        arma::mat eigenrow(eigenvectors.row(l));
+        arma::mat scaledeigenrow = eigenrow * filledwithones;
+        theta = arma::acos(arma::dot(scaledeigenrow, d_gradients)).t();
+    } // main loop
 }
 
 #endif//_PROCESS_HPP

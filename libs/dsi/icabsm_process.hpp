@@ -47,6 +47,11 @@ private:
     float A2[10];
     float A3[14];
     float B1[1];
+    float stick_d_min;
+    float stick_d_max;
+    float ball_d_min;
+    float ball_d_max;
+
 
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
@@ -118,14 +123,16 @@ public:
         num_fibers.clear();
         num_fibers.resize(voxel.dim.size());
 
-        p_min0[0] = 0.00f; p_min0[1] = 0.0010f;
-        p_max0[0] = 1.00f; p_max0[1] = 0.0020f;
-        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f;  p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = 0.0010f;
-        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f;   p_max1[3] = 1.0f;  p_max1[4] = 1.0f;  p_max1[5] = 0.0020f;
-        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f;  p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f; p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = 0.0010f;
-        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f;  p_max2[3] = 1.0f;  p_max2[4] = 1.0f;  p_max2[5] = 1.0f;  p_max2[6] = 1.0f;  p_max2[7] = 1.0f;  p_max2[8] = 1.0f;  p_max2[9] = 0.0020f;
-        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f;  p_min3[3] = 0.01f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f; p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = 0.0010f;
-        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f;  p_max3[3] = 0.99f; p_max3[4] = 1.0f;  p_max3[5] = 1.0f;  p_max3[6] = 1.0f;  p_max3[7] = 1.0f;  p_max3[8] = 1.0f;  p_max3[9] = 1.0f;  p_max3[10] = 1.0f;  p_max3[11] = 1.0f;  p_max3[12] = 1.0f;  p_max3[13] = 0.0020f;
+        stick_d_min = 0.00010f; stick_d_max = 0.0020f;
+        ball_d_min  = 0.0005f; ball_d_max  = 0.0030f;
+        p_min0[0] = 0.05f; p_min0[1] = ball_d_min;
+        p_max0[0] = 0.95f; p_max0[1] = ball_d_max;
+        p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f;  p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = stick_d_min;   //0.0010f
+        p_max1[0] = 0.95f; p_max1[1] = 0.95f; p_max1[2] = 1.0f;   p_max1[3] = 1.0f;  p_max1[4] = 1.0f;  p_max1[5] = stick_d_max;   //0.0020f
+        p_min2[0] = 0.05f; p_min2[1] = 0.05f; p_min2[2] = 0.05f;  p_min2[3] = -1.0f; p_min2[4] = -1.0f; p_min2[5] = -1.0f; p_min2[6] = -1.0f; p_min2[7] = -1.0f; p_min2[8] = -1.0f; p_min2[9] = stick_d_min;
+        p_max2[0] = 0.95f; p_max2[1] = 0.95f; p_max2[2] = 0.95f;  p_max2[3] = 1.0f;  p_max2[4] = 1.0f;  p_max2[5] = 1.0f;  p_max2[6] = 1.0f;  p_max2[7] = 1.0f;  p_max2[8] = 1.0f;  p_max2[9] = stick_d_max;
+        p_min3[0] = 0.05f; p_min3[1] = 0.05f; p_min3[2] = 0.05f;  p_min3[3] = 0.05f; p_min3[4] = -1.0f; p_min3[5] = -1.0f; p_min3[6] = -1.0f; p_min3[7] = -1.0f; p_min3[8] = -1.0f; p_min3[9] = -1.0f; p_min3[10] = -1.0f; p_min3[11] = -1.0f; p_min3[12] = -1.0f; p_min3[13] = stick_d_min;
+        p_max3[0] = 0.95f; p_max3[1] = 0.95f; p_max3[2] = 0.95f;  p_max3[3] = 0.95f; p_max3[4] = 1.0f;  p_max3[5] = 1.0f;  p_max3[6] = 1.0f;  p_max3[7] = 1.0f;  p_max3[8] = 1.0f;  p_max3[9] = 1.0f;  p_max3[10] = 1.0f;  p_max3[11] = 1.0f;  p_max3[12] = 1.0f;  p_max3[13] = stick_d_max;
 
         A0[0] = 1.0f; A0[1] = 0.0f;
         A1[0] = 1.0f; A1[1] = 1.0f; A1[2] = 0.0f; A1[3] = 0.0f; A1[4] = 0.0f; A1[5] = 0.0f;
@@ -569,7 +576,7 @@ public:
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
+                    F_best[0] = std::abs<float>(par[1]);
                     for(n=0; n<3; n++)
                         V_best[n]=par[n+2];
                 }
@@ -584,8 +591,8 @@ public:
 
                 for(n=0; n<6; n++)
                 {    par[n+3] = eigenvectors[n];
-                    p_min3[n+2] = std::min<float>(par[n+3]*0.9f,par[n+3]*1.1f);
-                    p_max3[n+2] = std::max<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                    p_min3[n+3] = std::min<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                    p_max3[n+3] = std::max<float>(par[n+3]*0.9f,par[n+3]*1.1f);
                 }
 
                 par[9] = lambda;
@@ -608,8 +615,8 @@ public:
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
-                    F_best[1] = par[2];
+                    F_best[0] = std::abs<float>(par[1]);
+                    F_best[1] = std::abs<float>(par[2]);
                     for(n=0; n<6; n++)
                         V_best[n]=par[n+3];
                 }
@@ -625,8 +632,8 @@ public:
 
                 for(n=0; n<9; n++) // copy eigenvectors to par.
                 {    par[n+4] = eigenvectors[n];
-                    p_min3[n+2] = std::min<float>(par[n+4]*0.9f,par[n+4]*1.1f);
-                    p_max3[n+2] = std::max<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                    p_min3[n+4] = std::min<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                    p_max3[n+4] = std::max<float>(par[n+4]*0.9f,par[n+4]*1.1f);
                 }
 
                 par[13] = lambda;
@@ -649,9 +656,9 @@ public:
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
-                    F_best[0] = par[1];
-                    F_best[1] = par[2];
-                    F_best[2] = par[3];
+                    F_best[0] = std::abs<float>(par[1]);
+                    F_best[1] = std::abs<float>(par[2]);
+                    F_best[2] = std::abs<float>(par[3]);
                     for(n=0; n<9; n++)
                         V_best[n]=par[n+4];
                 }

@@ -405,6 +405,8 @@ void reconstruction_window::on_doDTI_clicked()
                 return;
         }
         std::fill(params,params+5,0.0);
+        if(ui->IDSI->isChecked())
+            doReconstruction(9,index+1 == filenames.size());
         if(ui->ICA->isChecked())
             doReconstruction(8,index+1 == filenames.size());
         if(ui->DTI->isChecked())
@@ -464,6 +466,21 @@ void reconstruction_window::on_DTI_toggled(bool checked)
 
 
 void reconstruction_window::on_ICA_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+}
+
+void reconstruction_window::on_IDSI_toggled(bool checked)
 {
     ui->ResolutionBox->setVisible(!checked);
     ui->ODFSharpening->setVisible(!checked);
@@ -541,9 +558,7 @@ void reconstruction_window::on_QDif_toggled(bool checked)
     ui->output_jacobian->setVisible(checked);
     ui->RecordODF->setVisible(checked);
 
-
 }
-
 
 void reconstruction_window::on_remove_background_clicked()
 {
@@ -1024,4 +1039,5 @@ void reconstruction_window::on_actionManual_Rotation_triggered()
     update_image();
     on_SlicePos_valueChanged(ui->SlicePos->value());
 }
+
 
