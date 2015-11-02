@@ -16,6 +16,7 @@ struct UserDataIDSI {
     int n;
     arma::mat matd_g;
     std::vector<std::vector<float>> d_gradient;
+    std::vector<float> *b_gradient;
     float *x;
 };
 
@@ -342,12 +343,10 @@ public:
         opts[3] = 1E-15;   // |e|^2
         opts[4] = 1E-15;   // delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
-        float *xstar = new float[b_count];
         UserDataIDSI mydata;
         mydata.x = new float[b_count];
         mydata.matd_g = voxel.matg_dg;
         mydata.d_gradient.clear();
-        mydata.d_gradient.resize(b_count);
         for(m=0; m<b_count; m++)
         {
             image::vector<3> tmp = voxel.bvectors[m];
@@ -357,6 +356,7 @@ public:
             vtmp.push_back(tmp[2]);
             mydata.d_gradient.push_back(vtmp);
         }
+        mydata.b_gradient = &voxel.bvalues;
         float e[4] = {0};
         float SC[4] = {0};
         float SC_min = 1E+15;
@@ -511,7 +511,6 @@ public:
             for(n=0; n<b_count; n++)
             {
                 x[n] = mixedSig(center_voxel, n);
-                xstar[n] = mixedSig(center_voxel, n);
                 mydata.x[n] = mixedSig(center_voxel, n);
             }
             switch(ica_num)
@@ -673,6 +672,9 @@ public:
         d0[data.voxel_index] = 1000.0*d[0];
         d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
 
+        delete [] x;
+        delete [] mydata.x;
+
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
     {
@@ -697,15 +699,26 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     int l;
     UserDataIDSI * data = (UserDataIDSI *) adata;
     int N = data->n;
-    arma::mat theta;
-    arma::mat d_gradients;
-    arma::mat fractions;
-    arma::mat eigenvectors;
-    arma::mat lambdas;
-    arma::mat tmp;
+    int L = 4;
+    float bin_start = 0.0f;
+    float bin_end = 3.0f;
+    arma::mat theta(1, n);
+    arma::mat d_gradients(3,n);
+    arma::mat eigenvectors(3, 3);
+    arma::mat lambdas(3, 2);
     arma::mat filledwithones(1, n, arma::fill::ones);
+    arma::mat s_aniso(1, n, arma::fill::zeros);
+    arma::mat D(L, 1);
+    arma::mat s_iso(L, n);
+    arma::mat b_gradients(1, n);
+    arma::mat iso_part(1, n, arma::fill::zeros);
+    arma::mat f_iso(1, L);
 
     // assign values
+    for(i=0; i<n; i++)
+        b_gradients(1, i) = (*data->b_gradient)[i+1];
+    for(i=0; i<L; i++)
+        D(i, 0) = i*((bin_end-bind_start)/(L-1));
     for(i=0; i<3; i++)
     {
         for(j=0; j<n; j++)
@@ -716,15 +729,29 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
 
     switch(N)
     {
+    case 0:
+        for(i=0; i<L; i++)
+            f_iso(0, i) = p[i];
+        break;
     case 1:
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+5];
+        lambdas(0, 0) = p[8];
+        lambdas(0, 1) = p[9];
+        for(i=0; i<L; i++)
+            f_iso(0, i) = p[i+1];
         break;
     case 2:
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+6];
         for(i=0; i<3; i++)
             eigenvectors(1, i) = p[i+9];
+        lambdas(0, 0) = p[12];
+        lambdas(0, 1) = p[14];
+        lambdas(1, 0) = p[13];
+        lambdas(1, 1) = p[15];
+        for(i=0; i<L; i++)
+            f_iso(0, i) = p[i+2];
         break;
     case 3:
         for(i=0; i<3; i++)
@@ -733,15 +760,48 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             eigenvectors(1, i) = p[i+10];
         for(i=0; i<3; i++)
             eigenvectors(2, i) = p[i+13];
+        lambdas(0, 0) = p[16];
+        lambdas(0, 1) = p[19];
+        lambdas(1, 0) = p[17];
+        lambdas(1, 1) = p[20];
+        lambdas(2, 0) = p[18];
+        lambdas(2, 1) = p[21];
+        for(i=0; i<L; i++)
+            f_iso(0, i) = p[i+3];
         break;
     }
 
     for(l=0; l<N; l++) // main loop
     {
-        arma::mat eigenrow(eigenvectors.row(l));
-        arma::mat scaledeigenrow = eigenrow * filledwithones;
-        theta = arma::acos(arma::dot(scaledeigenrow, d_gradients)).t();
+        arma::mat eigenrow(eigenvectors.row(l)); // eigenvectors = Nx3, eigenrow = 1x3
+        eigenrow = eigenrow.t(); // eigenrow = 3x1
+        arma::mat scaledeigenrow = eigenrow * filledwithones; // filledwithones = 1xn (e.g. n=64), scaledeigenrow = 3xn
+        arma::mat scaledtimesgradient(1,n); // d_gradients = 3xn, scaledtimesgradient = 1xn
+        for(i=0; i<scaledeigenrow.n_cols; i++)
+            scaledtimesgradient(0, i) = scaledeigenrow(0, i) * d_gradients(0,i) +
+                    scaledeigenrow(1, i) * d_gradients(1, i) +
+                    scaledeigenrow(2, i) * d_gradients(2, i);
+        theta = arma::acos<arma::mat>(scaledtimesgradient).t();
+        for(i=0; i<n; i++)
+        {
+            s_aniso(0, i) = expf(-1*b_gradients(i, 0)*lambdas(l, 1)) *
+                    expf(-1*b_gradients(i, 0) * (lambdas(l, 0) - lambdas(l, 1)) *
+                         cos(theta(i,0)) * cos(theta(i,0)));
+        }
     } // main loop
+    s_iso = -1 * (D * b_gradient);
+    for(i=0; i<L; i++)
+    {
+        for(j=0; j<n ; j++)
+        {
+            iso_part(0, j) += f_iso(0, i) * s_iso(i, j);
+        }
+    }
+    for(i=0; i<n; i++)
+    {
+        hx[i] = s_aniso(0, i) + iso_part(0, i);
+        data->x = hx[i];
+    }
 }
 
 #endif//_PROCESS_HPP
