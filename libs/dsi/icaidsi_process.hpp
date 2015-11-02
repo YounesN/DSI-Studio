@@ -14,7 +14,6 @@ using namespace std;
 
 struct UserDataIDSI {
     int n;
-    arma::mat matd_g;
     std::vector<std::vector<float>> d_gradient;
     std::vector<float> *b_gradient;
     float *x;
@@ -256,12 +255,11 @@ public:
         // ICA
         unsigned int i=0,j=0,k=0,m=0,n=0;
         /* get 3d position */
-        unsigned int index = data.voxel_index;
-        k = (unsigned int) index / (voxel.dim.h * voxel.dim.w);
-        index -= k * voxel.dim.h * voxel.dim.w;
+        i = data.voxel_index;
+        k = (unsigned int) i / (voxel.dim.h * voxel.dim.w);
+        i -= k * voxel.dim.h * voxel.dim.w;
 
-        j = (unsigned int) index / voxel.dim.w;
-        index -= j * voxel.dim.w;
+        j = (unsigned int) i / voxel.dim.w;
         i -= j * voxel.dim.w;
 
         if(threeDim)
@@ -345,7 +343,6 @@ public:
         float *x = new float[b_count];
         UserDataIDSI mydata;
         mydata.x = new float[b_count];
-        mydata.matd_g = voxel.matg_dg;
         mydata.d_gradient.clear();
         for(m=0; m<b_count; m++)
         {
@@ -701,24 +698,30 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     int N = data->n;
     int L = 4;
     float bin_start = 0.0f;
-    float bin_end = 3.0f;
+    float bin_end = 3.0E-3f;
     arma::mat theta(1, n);
     arma::mat d_gradients(3,n);
     arma::mat eigenvectors(3, 3);
     arma::mat lambdas(3, 2);
     arma::mat filledwithones(1, n, arma::fill::ones);
-    arma::mat s_aniso(1, n, arma::fill::zeros);
     arma::mat D(L, 1);
+    arma::mat s_aniso;
     arma::mat s_iso(L, n);
     arma::mat b_gradients(1, n);
     arma::mat iso_part(1, n, arma::fill::zeros);
+    arma::mat anis_part(1, n, arma::fill::zeros);
     arma::mat f_iso(1, L);
+    arma::mat f_aniso;
+    if(N!=0)
+        s_aniso.set_size(N, n);
+    if(N!=0)
+        f_aniso.set_size(1, N);
 
     // assign values
     for(i=0; i<n; i++)
-        b_gradients(1, i) = (*data->b_gradient)[i+1];
+        b_gradients(0, i) = (*data->b_gradient)[i+1];
     for(i=0; i<L; i++)
-        D(i, 0) = i*((bin_end-bind_start)/(L-1));
+        D(i, 0) = i*((bin_end-bin_start)/(L-1));
     for(i=0; i<3; i++)
     {
         for(j=0; j<n; j++)
@@ -740,6 +743,7 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
         lambdas(0, 1) = p[9];
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+1];
+        f_aniso(0, 0) = p[0];
         break;
     case 2:
         for(i=0; i<3; i++)
@@ -752,6 +756,8 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
         lambdas(1, 1) = p[15];
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+2];
+        f_aniso(0, 0) = p[0];
+        f_aniso(0, 1) = p[1];
         break;
     case 3:
         for(i=0; i<3; i++)
@@ -768,6 +774,9 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
         lambdas(2, 1) = p[21];
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+3];
+        f_aniso(0, 0) = p[0];
+        f_aniso(0, 1) = p[1];
+        f_aniso(0, 2) = p[2];
         break;
     }
 
@@ -784,12 +793,13 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
         theta = arma::acos<arma::mat>(scaledtimesgradient).t();
         for(i=0; i<n; i++)
         {
-            s_aniso(0, i) = expf(-1*b_gradients(i, 0)*lambdas(l, 1)) *
-                    expf(-1*b_gradients(i, 0) * (lambdas(l, 0) - lambdas(l, 1)) *
+            s_aniso(l, i) = expf(-1*b_gradients(0, i)*lambdas(l, 1)) *
+                    expf(-1*b_gradients(0, i) * (lambdas(l, 0) - lambdas(l, 1)) *
                          cos(theta(i,0)) * cos(theta(i,0)));
         }
     } // main loop
-    s_iso = -1 * (D * b_gradient);
+    anis_part = f_aniso * s_aniso;
+    s_iso = -1 * (D * b_gradients);
     for(i=0; i<L; i++)
     {
         for(j=0; j<n ; j++)
@@ -799,8 +809,8 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     }
     for(i=0; i<n; i++)
     {
-        hx[i] = s_aniso(0, i) + iso_part(0, i);
-        data->x = hx[i];
+        hx[i] = anis_part(0, i) + iso_part(0, i);
+        data->x[i] = hx[i];
     }
 }
 
