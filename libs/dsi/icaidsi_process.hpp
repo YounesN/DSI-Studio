@@ -798,7 +798,6 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
                          cos(theta(i,0)) * cos(theta(i,0)));
         }
     } // main loop
-    anis_part = f_aniso * s_aniso;
     s_iso = -1 * (D * b_gradients);
     for(i=0; i<L; i++)
     {
@@ -807,10 +806,22 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             iso_part(0, j) += f_iso(0, i) * s_iso(i, j);
         }
     }
-    for(i=0; i<n; i++)
+    if(N==0)
     {
-        hx[i] = anis_part(0, i) + iso_part(0, i);
-        data->x[i] = hx[i];
+        for(i=0; i<n; i++)
+        {
+            hx[i] = iso_part(0, i);
+            data->x[i] = hx[i];
+        }
+    }
+    else
+    {
+        anis_part = f_aniso * s_aniso;
+        for(i=0; i<n; i++)
+        {
+            hx[i] = anis_part(0, i) + iso_part(0, i);
+            data->x[i] = hx[i];
+        }
     }
 }
 
