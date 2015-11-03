@@ -94,6 +94,7 @@ public: // user in fib evaluation
     std::vector<float> fib_fa;
     std::vector<float> fib_dir;
     std::vector<float> fr;
+    std::vector<float> ia;
 public: // gradient and B tables
     std::vector<float> g_dg;
     arma::mat matg_dg;

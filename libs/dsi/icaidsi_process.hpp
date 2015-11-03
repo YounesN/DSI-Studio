@@ -17,9 +17,23 @@ struct UserDataIDSI {
     std::vector<std::vector<float>> d_gradient;
     std::vector<float> *b_gradient;
     float *x;
+    ofstream *out;
 };
 
 void cost_function_idsi(float *p, float *hx, int m, int n, void *adata);
+
+void printToFile(ofstream &out, float *data, int size, string message)
+{
+    int i;
+    out << "------------------" << message << "------------------" << std::endl;
+    for(i=0; i<size; i++)
+    {
+        out << data[i] << " ";
+        if((i+1)%10==0)
+            out << std::endl;
+    }
+    out << std::endl;
+}
 
 class ICAIDSI : public BaseProcess
 {
@@ -93,19 +107,6 @@ private:
         return ret;
     }
 
-    void printToFile(ofstream &out, float *data, int size, string message)
-    {
-        int i;
-        out << "------------------" << message << "------------------" << std::endl;
-        for(i=0; i<size; i++)
-        {
-            out << data[i] << " ";
-            if((i+1)%10==0)
-                out << std::endl;
-        }
-        out << std::endl;
-    }
-
     void setFloatValue(float *arr, float value, int size)
     {
         int i;
@@ -128,8 +129,8 @@ public:
 
         float min_fraction = 0.05f; // minimum value of fractions
         float max_fraction = 0.95;  // maximum value of fractions
-        float min_lambda = 0.0010f; // minimum value of lambda
-        float max_lambda = 0.0020f; // maximum value of lambda
+        float min_lambda = 1.0f; // minimum value of lambda
+        float max_lambda = 2.0f; // maximum value of lambda
         float min_vector = -1.0f;   // minimum value of eigenvector
         float max_vector = 1.0f;    // maximum value of eigenvector
 
@@ -194,6 +195,8 @@ public:
 
         voxel.fr.clear();
         voxel.fr.resize(numOfIC* voxel.dim.size());
+        voxel.ia.clear();
+        voxel.ia.resize(4 * voxel.dim.size());
         voxel.fib_fa.clear();
         voxel.fib_fa.resize(voxel.dim.size());
         voxel.fib_dir.clear();
@@ -230,10 +233,10 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        //ofstream out;
-        //out.open("output.txt", ios::app);
+        ofstream out;
+        out.open("output.txt", ios::app);
 
-        bool threeDim = true;
+        bool threeDim = false;
         int center_voxel = 4;
 
         if(threeDim)
@@ -261,6 +264,9 @@ public:
 
         j = (unsigned int) i / voxel.dim.w;
         i -= j * voxel.dim.w;
+
+        out << "====================================================" << std::endl;
+        out << "i= " << i << ", j= " << j << ", k= " << k << std::endl;
 
         if(threeDim)
         {
@@ -341,12 +347,17 @@ public:
         opts[3] = 1E-15;   // |e|^2
         opts[4] = 1E-15;   // delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
+        float *weight0 = new float[b_count];
+        float *weight1 = new float[b_count];
+        float *weight2 = new float[b_count];
+        float *weight3 = new float[b_count];
         UserDataIDSI mydata;
         mydata.x = new float[b_count];
         mydata.d_gradient.clear();
+        mydata.out = &out;
         for(m=0; m<b_count; m++)
         {
-            image::vector<3> tmp = voxel.bvectors[m];
+            image::vector<3> tmp = voxel.bvectors[m+1];
             std::vector<float> vtmp;
             vtmp.push_back(tmp[0]);
             vtmp.push_back(tmp[1]);
@@ -359,6 +370,7 @@ public:
         float SC_min = 1E+15;
         float V_best[9];
         float F_best[3];
+        float IA_best[4];
         int result;
         int maxIteration;
         int niter = 20;
@@ -509,6 +521,11 @@ public:
             {
                 x[n] = mixedSig(center_voxel, n);
                 mydata.x[n] = mixedSig(center_voxel, n);
+                weight0[n]= (b_count-4+1)/(x[n]*x[n]);
+                weight1[n]= (b_count-10+1)/(x[n]*x[n]);
+                weight2[n]= (b_count-16+1)/(x[n]*x[n]);
+                weight3[n]= (b_count-22+1)/(x[n]*x[n]);
+
             }
             switch(ica_num)
             {
@@ -519,77 +536,122 @@ public:
                 maxIteration = niter * 4;
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 4, b_count, p_min0, p_max0, A0, B1,
-                                          1, NULL, maxIteration, opts, info, NULL,
+                                          1, weight0, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
+                //printToFile(out, par, 4, "Parameters");
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                //printToFile(out, x, b_count, "X(0)");
+                //printToFile(out, mydata.x, b_count, "New X(0)");
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
+                    for(n=0; n<4; n++)
+                        IA_best[n] = par[n];
                 }
                 break;
             case 1: // one ica source
                 for(m=0; m<5; m++)
                     par[m] = 1.0f/5;
                 for(m=0; m<3; m++)
+                {
                     par[m+5] = eigenvectors[m];
+                    p_min1[m+5] = std::min<float>(par[m+5]*0.9f,par[m+5]*1.1f);
+                    p_max1[m+5] = std::max<float>(par[m+5]*0.9f,par[m+5]*1.1f);
+                }
                 for(m=8; m<10; m++)
                     par[m] = lambda;
                 mydata.n = 1;
                 maxIteration = niter * 10;
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 10, b_count, p_min1, p_max1, A1, B1,
-                                          1, NULL, maxIteration, opts, info, NULL,
+                                          1, weight1, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
+                //printToFile(out, par, 10, "Parameters");
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                //printToFile(out, x, b_count, "X(1)");
+                //printToFile(out, mydata.x, b_count, "New X(1)");
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[0]);
+                    for(n=0; n<4; n++)
+                        IA_best[n] = par[n+1];
+                    for(n=0; n<3; n++)
+                        V_best[n]=par[n+5];
                 }
                 break;
             case 2: // two ica sources
                 for(m=0; m<6; m++)
                     par[m] = 1.0f/6;
                 for(m=0; m<6; m++)
+                {
                     par[m+6] = eigenvectors[m];
+                    p_min2[m+6] = std::min<float>(par[m+6]*0.9f,par[m+6]*1.1f);
+                    p_max2[m+6] = std::max<float>(par[m+6]*0.9f,par[m+6]*1.1f);
+                }
                 for(m=12; m<16; m++)
                     par[m] = lambda;
                 mydata.n = 2;
                 maxIteration = niter * 16;
+                printToFile(out, p_min2, 16, "p_min2");
+                printToFile(out, p_max2, 16, "p_max2");
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 16, b_count, p_min2, p_max2, A2, B1,
-                                          1, NULL, maxIteration, opts, info, NULL,
+                                          1, weight2, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
+                //printToFile(out, par, 16, "Parameters");
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                //printToFile(out, x, b_count, "X(2)");
+                //printToFile(out, mydata.x, b_count, "New X(2)");
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[0]);
+                    F_best[1] = std::abs<float>(par[1]);
+                    for(n=0; n<4; n++)
+                        IA_best[n] = par[n+2];
+                    for(n=0; n<6; n++)
+                        V_best[n] = par[n+6];
                 }
                 break;
             case 3: // three ica sources
                 for(m=0; m<7; m++)
                     par[m] = 1.0f/7;
                 for(m=0; m<9; m++)
+                {
                     par[m+7] = eigenvectors[m];
+                    p_min3[m+7] = std::min<float>(par[m+7]*0.9f,par[m+7]*1.1f);
+                    p_max3[m+7] = std::max<float>(par[m+7]*0.9f,par[m+7]*1.1f);
+                }
                 for(m=16; m<22; m++)
                     par[m] = lambda;
                 mydata.n = 3;
                 maxIteration = niter * 22;
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 22, b_count, p_min3, p_max3, A3, B1,
-                                          1, NULL, maxIteration, opts, info, NULL,
+                                          1, weight3, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
                 e[ica_num] = info[1];
                 SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                //printToFile(out, x, b_count, "X(3)");
+                //printToFile(out, mydata.x, b_count, "New X(3)");
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
                     min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[1]);
+                    F_best[1] = std::abs<float>(par[2]);
+                    F_best[2] = std::abs<float>(par[3]);
+                    for(n=0; n<4; n++)
+                        IA_best[n] = par[n+3];
+                    for(n=0; n<9; n++)
+                        V_best[n] = par[n+7];
                 }
                 break;
             }
@@ -604,6 +666,10 @@ public:
             voxel.fr[data.voxel_index] = 0;
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            voxel.ia[data.voxel_index] = IA_best[0];
+            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
+            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
+            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
             break;
         case 1:
             V[0] = V[1] = V[2] = 0;
@@ -613,6 +679,10 @@ public:
             voxel.fr[data.voxel_index] = F_best[0];
             voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            voxel.ia[data.voxel_index] = IA_best[0];
+            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
+            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
+            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
             break;
         case 2:
             V[0] = V[1] = V[2] = 0;
@@ -622,6 +692,10 @@ public:
             voxel.fr[data.voxel_index] = F_best[0];
             voxel.fr[voxel.dim.size()+data.voxel_index] = F_best[1];
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            voxel.ia[data.voxel_index] = IA_best[0];
+            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
+            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
+            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
             break;
         case 3:
             std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
@@ -630,6 +704,10 @@ public:
             voxel.fr[data.voxel_index] = F_best[0];
             voxel.fr[voxel.dim.size()+data.voxel_index] = F_best[1];
             voxel.fr[2*voxel.dim.size()+data.voxel_index] = F_best[2];
+            voxel.ia[data.voxel_index] = IA_best[0];
+            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
+            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
+            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
             break;
         }
         num_fibers[data.voxel_index] = min_index;
@@ -671,6 +749,11 @@ public:
 
         delete [] x;
         delete [] mydata.x;
+        delete [] weight0;
+        delete [] weight1;
+        delete [] weight2;
+        delete [] weight3;
+        out.close();
 
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
@@ -681,6 +764,10 @@ public:
         mat_writer.write("fa0",&*voxel.fr.begin(), 1, voxel.fr.size()/3);
         mat_writer.write("fa1",&*voxel.fr.begin()+voxel.dim.size(), 1, voxel.fr.size()/3);
         mat_writer.write("fa2",&*voxel.fr.begin()+2*voxel.dim.size(), 1, voxel.fr.size()/3);
+        mat_writer.write("ia0",&*voxel.ia.begin(), 1, voxel.ia.size()/4);
+        mat_writer.write("ia1",&*voxel.ia.begin()+voxel.dim.size(), 1, voxel.ia.size()/4);
+        mat_writer.write("ia2",&*voxel.ia.begin()+2*voxel.dim.size(), 1, voxel.ia.size()/4);
+        mat_writer.write("ia3",&*voxel.ia.begin()+3*voxel.dim.size(), 1, voxel.ia.size()/4);
         mat_writer.write("gfa",&*voxel.fib_fa.begin(), 1, voxel.fib_fa.size());
         mat_writer.write("adc",&*md.begin(),1,md.size());
         mat_writer.write("axial_dif",&*d0.begin(),1,d0.size());
@@ -717,17 +804,22 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     if(N!=0)
         f_aniso.set_size(1, N);
 
+    //printToFile(*data->out, p, 22, "P");
+
     // assign values
     for(i=0; i<n; i++)
         b_gradients(0, i) = (*data->b_gradient)[i+1];
     for(i=0; i<L; i++)
         D(i, 0) = i*((bin_end-bin_start)/(L-1));
+    //*data->out << "=======d-gradients==========" << std:: endl;
     for(i=0; i<3; i++)
     {
         for(j=0; j<n; j++)
         {
             d_gradients(i,j) = data->d_gradient[j][i];
+            //*data->out << d_gradients(i, j) << " ";
         }
+        //*data->out << std::endl;
     }
 
     switch(N)
@@ -739,8 +831,8 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     case 1:
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+5];
-        lambdas(0, 0) = p[8];
-        lambdas(0, 1) = p[9];
+        lambdas(0, 0) = abs(p[8]/1000);
+        lambdas(0, 1) = abs(p[9]/1000);
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+1];
         f_aniso(0, 0) = p[0];
@@ -750,10 +842,10 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             eigenvectors(0, i) = p[i+6];
         for(i=0; i<3; i++)
             eigenvectors(1, i) = p[i+9];
-        lambdas(0, 0) = p[12];
-        lambdas(0, 1) = p[14];
-        lambdas(1, 0) = p[13];
-        lambdas(1, 1) = p[15];
+        lambdas(0, 0) = abs(p[12]/1000);
+        lambdas(0, 1) = abs(p[14]/1000);
+        lambdas(1, 0) = abs(p[13]/1000);
+        lambdas(1, 1) = abs(p[15]/1000);
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+2];
         f_aniso(0, 0) = p[0];
@@ -766,12 +858,12 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             eigenvectors(1, i) = p[i+10];
         for(i=0; i<3; i++)
             eigenvectors(2, i) = p[i+13];
-        lambdas(0, 0) = p[16];
-        lambdas(0, 1) = p[19];
-        lambdas(1, 0) = p[17];
-        lambdas(1, 1) = p[20];
-        lambdas(2, 0) = p[18];
-        lambdas(2, 1) = p[21];
+        lambdas(0, 0) = abs(p[16]/1000);
+        lambdas(0, 1) = abs(p[19]/1000);
+        lambdas(1, 0) = abs(p[17]/1000);
+        lambdas(1, 1) = abs(p[20]/1000);
+        lambdas(2, 0) = abs(p[18]/1000);
+        lambdas(2, 1) = abs(p[21]/1000);
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+3];
         f_aniso(0, 0) = p[0];
@@ -798,7 +890,7 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
                          cos(theta(i,0)) * cos(theta(i,0)));
         }
     } // main loop
-    s_iso = -1 * (D * b_gradients);
+    s_iso = arma::exp(-1 * (D * b_gradients));
     for(i=0; i<L; i++)
     {
         for(j=0; j<n ; j++)
@@ -823,6 +915,7 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             data->x[i] = hx[i];
         }
     }
+    printToFile(*data->out, data->x, n, "difference in x-value");
 }
 
 #endif//_PROCESS_HPP
