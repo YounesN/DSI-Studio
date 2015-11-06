@@ -47,6 +47,9 @@ private:
     std::vector<float> d1;
     std::vector<float> md;
     std::vector<float> num_fibers;
+    std::vector<float> multi_axial_diff;
+    std::vector<float> multi_radial_diff;
+
 
     // IDSI boundry variables
     float p_min0[4];
@@ -62,6 +65,7 @@ private:
     float A2[16];
     float A3[22];
     float B1[1];
+
 
     unsigned int b_count;
     float get_fa(float l1, float l2, float l3)
@@ -126,13 +130,17 @@ public:
         d1.resize(voxel.dim.size());
         num_fibers.clear();
         num_fibers.resize(voxel.dim.size());
+        multi_axial_diff.clear();
+        multi_axial_diff.resize(voxel.dim.size());
+        multi_radial_diff.clear();
+        multi_radial_diff.resize(voxel.dim.size());
 
         float min_fraction = 0.05f; // minimum value of fractions
         float max_fraction = 0.95;  // maximum value of fractions
-        float min_lambda = 1.0f; // minimum value of lambda
-        float max_lambda = 2.0f; // maximum value of lambda
-        float min_vector = -1.0f;   // minimum value of eigenvector
-        float max_vector = 1.0f;    // maximum value of eigenvector
+        float min_lambda   = 0.05f; // minimum value of lambda
+        float max_lambda   = 0.3f; // maximum value of lambda
+        float min_vector   = -1.0f;   // minimum value of eigenvector
+        float max_vector   = 1.0f;    // maximum value of eigenvector
 
         // setFloatValue ( array to copy, the value, size of array )
         setFloatValue(p_min0, min_fraction, 4);
@@ -233,10 +241,10 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        ofstream out;
-        out.open("output.txt", ios::app);
+        //ofstream out;
+        //out.open("output.txt", ios::app);
 
-        bool threeDim = false;
+        bool threeDim = true;
         int center_voxel = 4;
 
         if(threeDim)
@@ -265,8 +273,8 @@ public:
         j = (unsigned int) i / voxel.dim.w;
         i -= j * voxel.dim.w;
 
-        out << "====================================================" << std::endl;
-        out << "i= " << i << ", j= " << j << ", k= " << k << std::endl;
+        //out << "====================================================" << std::endl;
+        //out << "i= " << i << ", j= " << j << ", k= " << k << std::endl;
 
         if(threeDim)
         {
@@ -336,16 +344,17 @@ public:
 
         // BSM variables
         float par[22];
-        float lambda = 0.0015;
+        float sum;
+        float lambda = 0.15;
         float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-6;    // mu
-        opts[1] = 1E-15;
-        opts[2] = 1E-15;   // |dp|^2
-        opts[3] = 1E-15;   // |e|^2
-        opts[4] = 1E-15;   // delta, step used in difference approximation to the Jacobian
+        opts[0] = 1E-1;    // mu
+        opts[1] = 1E-6;
+        opts[2] = 1E-6;   // |dp|^2
+        opts[3] = 1E-6;   // |e|^2
+        opts[4] = 1E-6;   // delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
         float *weight0 = new float[b_count];
         float *weight1 = new float[b_count];
@@ -354,7 +363,7 @@ public:
         UserDataIDSI mydata;
         mydata.x = new float[b_count];
         mydata.d_gradient.clear();
-        mydata.out = &out;
+        //mydata.out = &out;
         for(m=0; m<b_count; m++)
         {
             image::vector<3> tmp = voxel.bvectors[m+1];
@@ -370,6 +379,8 @@ public:
         float SC_min = 1E+15;
         float V_best[9];
         float F_best[3];
+        float PA_best[1];
+        float VE_best[1];
         float IA_best[4];
         int result;
         int maxIteration;
@@ -382,17 +393,100 @@ public:
         std::vector<float> signal(b_count);
         std::vector<float> w(3);
 
-        for(ica_num = 0; ica_num <=3; ica_num++)
+
+        // DTI
+        if (data.space.front() != 0.0)
         {
+            float logs0 = std::log(std::max<float>(1.0,data.space.front()));
+            for (unsigned int i = 1; i < data.space.size(); ++i)
+                signal[i-1] = std::max<float>(0.0,logs0-std::log(std::max<float>(1.0,data.space[i])));
+        }
+
+        arma::mat matsignal(b_count,1);
+        set_arma_col(matsignal, signal, 0);
+        arma::mat pos_invg_dg = -voxel.matinvg_dg;
+        tensor_param = pos_invg_dg * matsignal;
+
+        unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
+        for(unsigned int index = 0; index < 9; index++)
+            tensor[index] = tensor_param(tensor_index[index],0);
+        image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
+        if (d[1] < 0.0)
+        {
+            d[1] = 0.0;
+            d[2] = 0.0;
+        }
+        if (d[2] < 0.0)
+            d[2] = 0.0;
+        if (d[0] < 0.0)
+        {
+            d[0] = 0.0;
+            d[1] = 0.0;
+            d[2] = 0.0;
+        }
+        data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
+        md[data.voxel_index] = (d[0]+d[1]+d[2])/3.0;
+        d0[data.voxel_index] = d[0];
+        d1[data.voxel_index] = (d[1]+d[2])/2.0;
+
+        if (data.fa[0] < 0.1)
+        {
+            for(n=0; n<b_count; n++)
+            {
+                x[n] = mixedSig(center_voxel, n);
+                mydata.x[n] = mixedSig(center_voxel, n);
+                weight0[n]= (b_count-4+1)/(x[n]*x[n]);
+            }
+            sum=0.0f;
+            for(n=0; n<4; n++)
+            {
+                par[n] =  ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                sum+=par[n];
+            }
+
+            for(n=0; n<4; n++)
+                par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+            mydata.n = 0;
+            maxIteration = niter * 4;
+            //printToFile(out, p_min1, 4, "p_min0");
+            //printToFile(out, p_max1, 4, "p_max0");
+            //printToFile(out, par, 4, "Before-Parameters");
+            result = slevmar_blec_dif(&cost_function_idsi, par,
+                                      x, 4, b_count, p_min0, p_max0, A0, B1,
+                                      1, weight0, maxIteration, opts, info, NULL,
+                                      NULL, (void*)&mydata);
+            //printToFile(out, par, 4, "After-Parameters");
+            e[ica_num] = info[1];
+            SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+            //printToFile(out, x, b_count, "X(0)");
+            //printToFile(out, mydata.x, b_count, "New X(0)");
+
+            for(n=0; n<4; n++)
+               IA_best[n] = par[n];
+            V[0] = V[1] = V[2] = 0; PA_best[0]=0; VE_best[0]=0;
+            std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            voxel.fr[data.voxel_index] = 0;
+            voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
+            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            voxel.ia[data.voxel_index] = IA_best[0];
+            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
+            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
+            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
+        }
+        else
+        {
+            for(ica_num = 1; ica_num <=3; ica_num++)
+            {
             float eigenvectors[9]; // BSM
             float fractions[4]; // BSM
             numOfIC = ica_num;
 
-            if(ica_num!=0) // We do not run ICA for zero sticks, we run only BSM.
-            {
-                if(ica_num == 1 || ica_num == 3)
+               if(ica_num == 1 || ica_num == 3)
                     g = FICA_NONLIN_POW3;
-                else
+               else
                     g = FICA_NONLIN_TANH;
 
                 itpp::Fast_ICA fi(mixedSig);
@@ -515,45 +609,38 @@ public:
                 icasig.clear();
                 icasig_no_log.clear();
 
-            } // if (ica_num!=0)
-
             for(n=0; n<b_count; n++)
             {
                 x[n] = mixedSig(center_voxel, n);
-                mydata.x[n] = mixedSig(center_voxel, n);
-                weight0[n]= (b_count-4+1)/(x[n]*x[n]);
+                mydata.x[n] = mixedSig(center_voxel, n);                
                 weight1[n]= (b_count-10+1)/(x[n]*x[n]);
                 weight2[n]= (b_count-16+1)/(x[n]*x[n]);
                 weight3[n]= (b_count-22+1)/(x[n]*x[n]);
 
             }
             switch(ica_num)
-            {
-            case 0: // zero source
-                for(n=0; n<4; n++)
-                    par[n] = 0.25f; // divide 1 between four isotropic fractions
-                mydata.n = 0;
-                maxIteration = niter * 4;
-                result = slevmar_blec_dif(&cost_function_idsi, par,
-                                          x, 4, b_count, p_min0, p_max0, A0, B1,
-                                          1, weight0, maxIteration, opts, info, NULL,
-                                          NULL, (void*)&mydata);
-                //printToFile(out, par, 4, "Parameters");
-                e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
-                //printToFile(out, x, b_count, "X(0)");
-                //printToFile(out, mydata.x, b_count, "New X(0)");
-                if(SC_min > SC[ica_num])
-                {
-                    SC_min = SC[ica_num];
-                    min_index = ica_num;
-                    for(n=0; n<4; n++)
-                        IA_best[n] = par[n];
-                }
-                break;
+            {            
             case 1: // one ica source
-                for(m=0; m<5; m++)
-                    par[m] = 1.0f/5;
+                //for(m=0; m<5; m++)
+                //    par[m] = 1.0f/5;
+
+                sum=0.0f;
+                for(n=0; n<5; n++)
+                {
+                    if (n==1)
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                    else
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                        sum+=par[n];
+                }
+
+                for(n=0; n<5; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                //par[0] = fractions[0]*0.5;
+                //for(m=0; m<4; m++)
+                //    par[m+1]=(1.0f-par[0])/4;
+
                 for(m=0; m<3; m++)
                 {
                     par[m+5] = eigenvectors[m];
@@ -561,18 +648,23 @@ public:
                     p_max1[m+5] = std::max<float>(par[m+5]*0.9f,par[m+5]*1.1f);
                 }
                 for(m=8; m<10; m++)
-                    par[m] = lambda;
+                    par[m] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
+
                 mydata.n = 1;
                 maxIteration = niter * 10;
+                //printToFile(out, p_min1, 10, "p_min1");
+                //printToFile(out, p_max1, 10, "p_max1");
+                //printToFile(out, par, 10, "Before-Parameters");
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 10, b_count, p_min1, p_max1, A1, B1,
                                           1, weight1, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
                 //printToFile(out, par, 10, "Parameters");
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
                 //printToFile(out, x, b_count, "X(1)");
                 //printToFile(out, mydata.x, b_count, "New X(1)");
+
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
@@ -582,11 +674,33 @@ public:
                         IA_best[n] = par[n+1];
                     for(n=0; n<3; n++)
                         V_best[n]=par[n+5];
+                    PA_best[0] = 0.01f*par[8]; //
+                    VE_best[0] = 0.01f*par[9]; //
                 }
                 break;
             case 2: // two ica sources
-                for(m=0; m<6; m++)
-                    par[m] = 1.0f/6;
+                //for(m=0; m<6; m++)
+                //    par[m] = 1.0f/6;
+
+                sum=0.0f;
+                for(n=0; n<6; n++)
+                {
+                    if (n==1 || n==2)
+                         par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                    else
+                         par[n] =  ((float) rand()/(RAND_MAX));
+                         sum+=par[n];
+                }
+
+                for(n=0; n<6; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                //par[0] = fractions[0]*0.5;
+                //par[1] = fractions[1]*0.5;
+
+                //for(m=0; m<4; m++)
+                //    par[m+2]=(1.0f-(par[0]+par[1]))/4;
+
                 for(m=0; m<6; m++)
                 {
                     par[m+6] = eigenvectors[m];
@@ -594,20 +708,24 @@ public:
                     p_max2[m+6] = std::max<float>(par[m+6]*0.9f,par[m+6]*1.1f);
                 }
                 for(m=12; m<16; m++)
-                    par[m] = lambda;
+                    par[m] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
                 mydata.n = 2;
                 maxIteration = niter * 16;
-                printToFile(out, p_min2, 16, "p_min2");
-                printToFile(out, p_max2, 16, "p_max2");
+
+
+                //printToFile(out, p_min2, 16, "p_min2");
+                //printToFile(out, p_max2, 16, "p_max2");
+                //printToFile(out, par, 16, "Before-Parameters");
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 16, b_count, p_min2, p_max2, A2, B1,
                                           1, weight2, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
                 //printToFile(out, par, 16, "Parameters");
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+16*logf(b_count)/b_count;
                 //printToFile(out, x, b_count, "X(2)");
                 //printToFile(out, mydata.x, b_count, "New X(2)");
+
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
@@ -618,11 +736,35 @@ public:
                         IA_best[n] = par[n+2];
                     for(n=0; n<6; n++)
                         V_best[n] = par[n+6];
+                    PA_best[0] = 0.01f*(par[12]+par[13])/2; //
+                    VE_best[0] = 0.01f*(par[14]+par[15])/2; //
                 }
                 break;
             case 3: // three ica sources
-                for(m=0; m<7; m++)
-                    par[m] = 1.0f/7;
+                //for(m=0; m<7; m++)
+                //    par[m] = 1.0f/7;
+
+                sum=0.0f;
+                for(n=0; n<7; n++)
+                {
+                    if (n==1 || n==2 || n==3)
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                    else
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                        sum+=par[n];
+                }
+
+                for(n=0; n<7; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                //par[0] = fractions[0]*0.5;
+                //par[1] = fractions[1]*0.5;
+                //par[2] = fractions[2]*0.5;
+
+                //for(m=0; m<4; m++)
+                //    par[m+3]=(1.0f-(par[0]+par[1]+par[2]))/4;
+
+
                 for(m=0; m<9; m++)
                 {
                     par[m+7] = eigenvectors[m];
@@ -630,17 +772,23 @@ public:
                     p_max3[m+7] = std::max<float>(par[m+7]*0.9f,par[m+7]*1.1f);
                 }
                 for(m=16; m<22; m++)
-                    par[m] = lambda;
+                    par[m] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
                 mydata.n = 3;
-                maxIteration = niter * 22;
+                maxIteration = niter * 22;                
+                //printToFile(out, p_min3, 22, "p_min3");
+                //printToFile(out, p_max3, 22, "p_max3");
+
+                //printToFile(out, par, 22, "Before-Parameters");
                 result = slevmar_blec_dif(&cost_function_idsi, par,
                                           x, 22, b_count, p_min3, p_max3, A3, B1,
                                           1, weight3, maxIteration, opts, info, NULL,
                                           NULL, (void*)&mydata);
+                //printToFile(out, par,22, "After-Parameters");
                 e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+                SC[ica_num] = logf(e[ica_num]/b_count)+22*logf(b_count)/b_count;
                 //printToFile(out, x, b_count, "X(3)");
                 //printToFile(out, mydata.x, b_count, "New X(3)");
+
                 if(SC_min > SC[ica_num])
                 {
                     SC_min = SC[ica_num];
@@ -652,25 +800,14 @@ public:
                         IA_best[n] = par[n+3];
                     for(n=0; n<9; n++)
                         V_best[n] = par[n+7];
+                    PA_best[0] = 0.01f*(par[16]+par[17]+par[18])/3;  //
+                    VE_best[0] = 0.01f*(par[19]+par[20]+par[21])/3;  //
                 }
                 break;
             }
         }
         switch(min_index)
-        {
-        case 0:
-            V[0] = V[1] = V[2] = 0;
-            std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
-            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
-            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
-            voxel.fr[data.voxel_index] = 0;
-            voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
-            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
-            voxel.ia[data.voxel_index] = IA_best[0];
-            voxel.ia[voxel.dim.size()+data.voxel_index] = IA_best[1];
-            voxel.ia[2*voxel.dim.size()+data.voxel_index] = IA_best[2];
-            voxel.ia[3*voxel.dim.size()+data.voxel_index] = IA_best[3];
-            break;
+        {        
         case 1:
             V[0] = V[1] = V[2] = 0;
             std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
@@ -711,41 +848,10 @@ public:
             break;
         }
         num_fibers[data.voxel_index] = min_index;
+        multi_axial_diff[data.voxel_index] = PA_best[0];
+        multi_radial_diff[data.voxel_index] = VE_best[0];
+     }  // if FA<0.1
 
-        // DTI
-        if (data.space.front() != 0.0)
-        {
-            float logs0 = std::log(std::max<float>(1.0,data.space.front()));
-            for (unsigned int i = 1; i < data.space.size(); ++i)
-                signal[i-1] = std::max<float>(0.0,logs0-std::log(std::max<float>(1.0,data.space[i])));
-        }
-
-        arma::mat matsignal(b_count,1);
-        set_arma_col(matsignal, signal, 0);
-        arma::mat pos_invg_dg = -voxel.matinvg_dg;
-        tensor_param = pos_invg_dg * matsignal;
-
-        unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
-        for(unsigned int index = 0; index < 9; index++)
-            tensor[index] = tensor_param(tensor_index[index],0);
-        image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
-        if (d[1] < 0.0)
-        {
-            d[1] = 0.0;
-            d[2] = 0.0;
-        }
-        if (d[2] < 0.0)
-            d[2] = 0.0;
-        if (d[0] < 0.0)
-        {
-            d[0] = 0.0;
-            d[1] = 0.0;
-            d[2] = 0.0;
-        }
-        data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
-        md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
-        d0[data.voxel_index] = 1000.0*d[0];
-        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
 
         delete [] x;
         delete [] mydata.x;
@@ -753,7 +859,7 @@ public:
         delete [] weight1;
         delete [] weight2;
         delete [] weight3;
-        out.close();
+        //out.close();
 
     }
     virtual void end(Voxel& voxel,gz_mat_write& mat_writer)
@@ -770,9 +876,12 @@ public:
         mat_writer.write("ia3",&*voxel.ia.begin()+3*voxel.dim.size(), 1, voxel.ia.size()/4);
         mat_writer.write("gfa",&*voxel.fib_fa.begin(), 1, voxel.fib_fa.size());
         mat_writer.write("adc",&*md.begin(),1,md.size());
-        mat_writer.write("axial_dif",&*d0.begin(),1,d0.size());
-        mat_writer.write("radial_dif",&*d1.begin(),1,d1.size());
+        mat_writer.write("ad",&*d0.begin(),1,d0.size());
+        mat_writer.write("rd",&*d1.begin(),1,d1.size());
         mat_writer.write("numfiber", &*num_fibers.begin(), 1, num_fibers.size());
+        mat_writer.write("multi_ad", &*multi_axial_diff.begin(), 1, multi_axial_diff.size());
+        mat_writer.write("multi_rd", &*multi_radial_diff.begin(), 1, multi_radial_diff.size());
+        ;
     }
 };
 
@@ -829,23 +938,50 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             f_iso(0, i) = p[i];
         break;
     case 1:
+
+        //p[0]= 0.5645f; p[1]=0.4365f; p[2]=0.000f; p[3]=0.000f; p[4]=0.000f; p[5]=-0.9782f; p[6]=-0.1504f; p[7]=0.1434f; p[8]=
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+5];
-        lambdas(0, 0) = abs(p[8]/1000);
-        lambdas(0, 1) = abs(p[9]/1000);
+
+        eigenvectors(0, 0)=eigenvectors(0, 0)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 1)=eigenvectors(0, 1)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 2)=eigenvectors(0, 2)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+
+        //eigenvectors(0, 0)=  -0.9782f; eigenvectors(0, 1)=  -0.1504f; eigenvectors(0, 2)=  0.1434f;
+
+        lambdas(0, 0) = (p[8]/100);
+        lambdas(0, 1) = (p[9]/100);
+
+        //lambdas(0,0) = 0.0030f; lambdas(0,1)=0.0005f;
+
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+1];
         f_aniso(0, 0) = p[0];
+
+        //f_iso(0, 0)=0.4365f; f_iso(0, 1)=0.000f; f_iso(0, 2)=0.000f; f_iso(0, 3)=0.000f;
+        //f_aniso(0, 0)=0.5645f;
+
+
         break;
     case 2:
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+6];
+
+        eigenvectors(0, 0)=eigenvectors(0, 0)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 1)=eigenvectors(0, 1)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 2)=eigenvectors(0, 2)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+
         for(i=0; i<3; i++)
             eigenvectors(1, i) = p[i+9];
-        lambdas(0, 0) = abs(p[12]/1000);
-        lambdas(0, 1) = abs(p[14]/1000);
-        lambdas(1, 0) = abs(p[13]/1000);
-        lambdas(1, 1) = abs(p[15]/1000);
+
+        eigenvectors(1, 0)=eigenvectors(1, 0)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+        eigenvectors(1, 1)=eigenvectors(1, 1)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+        eigenvectors(1, 2)=eigenvectors(1, 2)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+
+        lambdas(0, 0) = (p[12]/100);
+        lambdas(0, 1) = (p[14]/100);
+        lambdas(1, 0) = (p[13]/100);
+        lambdas(1, 1) = (p[15]/100);
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+2];
         f_aniso(0, 0) = p[0];
@@ -854,16 +990,31 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
     case 3:
         for(i=0; i<3; i++)
             eigenvectors(0, i) = p[i+7];
+
+        eigenvectors(0, 0)=eigenvectors(0, 0)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 1)=eigenvectors(0, 1)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+        eigenvectors(0, 2)=eigenvectors(0, 2)/std::sqrt(eigenvectors(0, 0)*eigenvectors(0, 0)+eigenvectors(0, 1)*eigenvectors(0, 1)+eigenvectors(0, 2)*eigenvectors(0, 2));
+
         for(i=0; i<3; i++)
             eigenvectors(1, i) = p[i+10];
+
+        eigenvectors(1, 0)=eigenvectors(1, 0)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+        eigenvectors(1, 1)=eigenvectors(1, 1)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+        eigenvectors(1, 2)=eigenvectors(1, 2)/std::sqrt(eigenvectors(1, 0)*eigenvectors(1, 0)+eigenvectors(1, 1)*eigenvectors(1, 1)+eigenvectors(1, 2)*eigenvectors(1, 2));
+
         for(i=0; i<3; i++)
             eigenvectors(2, i) = p[i+13];
-        lambdas(0, 0) = abs(p[16]/1000);
-        lambdas(0, 1) = abs(p[19]/1000);
-        lambdas(1, 0) = abs(p[17]/1000);
-        lambdas(1, 1) = abs(p[20]/1000);
-        lambdas(2, 0) = abs(p[18]/1000);
-        lambdas(2, 1) = abs(p[21]/1000);
+
+        eigenvectors(2, 0)=eigenvectors(2, 0)/std::sqrt(eigenvectors(2, 0)*eigenvectors(2, 0)+eigenvectors(2, 1)*eigenvectors(2, 1)+eigenvectors(2, 2)*eigenvectors(2, 2));
+        eigenvectors(2, 1)=eigenvectors(2, 1)/std::sqrt(eigenvectors(2, 0)*eigenvectors(2, 0)+eigenvectors(2, 1)*eigenvectors(2, 1)+eigenvectors(2, 2)*eigenvectors(2, 2));
+        eigenvectors(2, 2)=eigenvectors(2, 2)/std::sqrt(eigenvectors(2, 0)*eigenvectors(2, 0)+eigenvectors(2, 1)*eigenvectors(2, 1)+eigenvectors(2, 2)*eigenvectors(2, 2));
+
+        lambdas(0, 0) = (p[16]/100);
+        lambdas(0, 1) = (p[19]/100);
+        lambdas(1, 0) = (p[17]/100);
+        lambdas(1, 1) = (p[20]/100);
+        lambdas(2, 0) = (p[18]/100);
+        lambdas(2, 1) = (p[21]/100);
         for(i=0; i<L; i++)
             f_iso(0, i) = p[i+3];
         f_aniso(0, 0) = p[0];
@@ -915,7 +1066,7 @@ void cost_function_idsi(float *p, float *hx, int m, int n, void *adata)
             data->x[i] = hx[i];
         }
     }
-    printToFile(*data->out, data->x, n, "difference in x-value");
+    //printToFile(*data->out, data->x, n, "difference in x-value");
 }
 
 #endif//_PROCESS_HPP

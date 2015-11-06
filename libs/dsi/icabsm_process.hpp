@@ -123,8 +123,8 @@ public:
         num_fibers.clear();
         num_fibers.resize(voxel.dim.size());
 
-        stick_d_min = 0.00010f; stick_d_max = 0.0020f;
-        ball_d_min  = 0.0005f; ball_d_max  = 0.0030f;
+        stick_d_min = 0.10f; stick_d_max = 0.20f;
+        ball_d_min  = 0.05f; ball_d_max  = 0.30f;
         p_min0[0] = 0.05f; p_min0[1] = ball_d_min;
         p_max0[0] = 0.95f; p_max0[1] = ball_d_max;
         p_min1[0] = 0.05f; p_min1[1] = 0.05f; p_min1[2] = -1.0f;  p_min1[3] = -1.0f; p_min1[4] = -1.0f; p_min1[5] = stick_d_min;   //0.0010f
@@ -296,16 +296,16 @@ public:
 
         // BSM variables
         float par[14];
-        float lambda = 0.0015f;
+        float lambda = 0.15f;
         float info[LM_INFO_SZ];
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-6;   // mu
-        opts[1] = 1E-15;
-        opts[2] = 1E-15;  // |dp|^2
-        opts[3] = 1E-15;  // |e|^2
-        opts[4] = 1E-15;  //  delta, step used in difference approximation to the Jacobian
+        opts[0] = 1E-3;   // mu
+        opts[1] = 1E-8;
+        opts[2] = 1E-8;  // |dp|^2
+        opts[3] = 1E-8;  // |e|^2
+        opts[4] = 1E-8;  //  delta, step used in difference approximation to the Jacobian
         float *x = new float[b_count];
         float *weight0 = new float[b_count];
         float *weight1 = new float[b_count];
@@ -320,6 +320,7 @@ public:
         float SC_min=1E+15;
         float V_best[9];
         float F_best[3];
+        float sum;
         int result;
         int maxIteration;
         int niter = 20;
@@ -362,18 +363,56 @@ public:
             d[2] = 0.0;
         }
         data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
-        md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
-        d0[data.voxel_index] = 1000.0*d[0];
-        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
+        md[data.voxel_index] = (d[0]+d[1]+d[2])/3.0;
+        d0[data.voxel_index] =  d[0];
+        d1[data.voxel_index] = (d[1]+d[2])/2.0;
 
-        for(ica_num = 0; ica_num <=3; ica_num++)
+
+        if (data.fa[0] < 0.1)
         {
+
+            for(n=0; n<b_count; n++)
+            {
+                x[n] = mixedSig(center_voxel,n);
+                xstar[n] = mixedSig(center_voxel,n);
+                mydata.x[n] = mixedSig(center_voxel,n);
+                weight0[n]= (b_count-2+1)/(x[n]*x[n]);
+            }
+
+                par[0] = 0.5f;
+                par[1] = lambda;
+                mydata.n = 0; maxIteration = niter*1;
+
+                //printToFile(out, partmp0, 2, "Par 0");
+                //printToFile(out, xtmp, b_count, "X");
+
+                result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, weight0, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //result = slevmar_bc_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+                //printToFile(out, partmp0, 2, "Par-Hat");
+                //printToFile(out, xtmp, b_count, "X-Hat");
+                //printToFile(out, info, 10, "info");
+                //printToFile(out, SC, 1, "SC");
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+
+                V[0] = V[1] = V[2] = 0;
+                std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+                std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+                std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+                voxel.fr[data.voxel_index] = 0;
+                voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
+                voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+
+        }
+        else
+        {
+          for(ica_num = 1; ica_num <=3; ica_num++)
+          {
             float eigenvectors[9]; // BSM
             float fractions[4]; // BSM
             numOfIC = ica_num;
 
-            if(ica_num!=0) // We do not run ICA for zero sticks, we run only BSM.
-            {
                 if(ica_num == 1 || ica_num == 3)
                     g = FICA_NONLIN_POW3;
                 else
@@ -499,14 +538,11 @@ public:
                 icasig.clear();
                 icasig_no_log.clear();
 
-            } // if (ica_num!=0)
-
             for(n=0; n<b_count; n++)
             {
                 x[n] = mixedSig(center_voxel,n);
                 xstar[n] = mixedSig(center_voxel,n);
                 mydata.x[n] = mixedSig(center_voxel,n);
-                weight0[n]= (b_count-2+1)/(x[n]*x[n]);
                 weight1[n]= (b_count-6+1)/(x[n]*x[n]);
                 weight2[n]= (b_count-10+1)/(x[n]*x[n]);
                 weight3[n]= (b_count-14+1)/(x[n]*x[n]);
@@ -519,35 +555,27 @@ public:
             //float partmp3[14] = {0.2505,    0.2523,    0.2543,    0.2429,   -0.6732,   -0.1339,    0.7272,   -0.9833,   -0.1618,    0.0838, -0.4323,    0.8999,    0.0572,    0.0015};
 
             switch(ica_num)
-            {
-            case 0: // zero sticks
-                par[0] = 0.5f;
-                par[1] = lambda;
-                mydata.n = 0; maxIteration = niter*1;
-
-                //printToFile(out, partmp0, 2, "Par 0");
-                //printToFile(out, xtmp, b_count, "X");
-
-                result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, weight0, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
-                //result = slevmar_bc_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, NULL, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
-                //printToFile(out, partmp0, 2, "Par-Hat");
-                //printToFile(out, xtmp, b_count, "X-Hat");
-                //printToFile(out, info, 10, "info");
-                //printToFile(out, SC, 1, "SC");
-
-                e[ica_num] = info[1];
-                SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
-                if (SC_min > SC[ica_num]) //&& (data.fa[0] <= 0.10))
-                {
-                    SC_min = SC[ica_num];
-                    min_index = ica_num;
-                }
-                break;
+            {            
             case 1: // one stick
-                fractions[1] = 0.5f; //fractions[1] *= 0.95;
-                fractions[0] = 1-fractions[1];
-                par[0] = fractions[0];
-                par[1] = fractions[1];
+
+                sum=0.0f;
+                for(n=0; n<2; n++)
+                {
+                    if (n==0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
+
+                for(n=0; n<2; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+
+                //fractions[1] = 0.5f; //fractions[1] *= 0.95;
+                //fractions[0] = 1-fractions[1];
+                //par[0] = fractions[0];
+                //par[1] = fractions[1];
 
                 for(n=0; n<3; n++)
                 {    par[n+2] = eigenvectors[n];
@@ -555,7 +583,7 @@ public:
                      p_max1[n+2] = std::max<float>(par[n+2]*0.9f,par[n+2]*1.1f);
                 }
 
-                par[5] = lambda;
+                par[5] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
 
                 mydata.n = 1; maxIteration = niter*6;
 
@@ -582,12 +610,25 @@ public:
                 }
                 break;
             case 2: // two sticks
-                fractions[1] = 0.33f; //fractions[1] *= 0.95;
-                fractions[2] = 0.33f; //fractions[2] *= 0.95;
-                fractions[0] = 1-fractions[1]-fractions[2];
+                sum=0.0f;
+                for(n=0; n<3; n++)
+                {
+                    if (n == 0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
 
-                for(n=0; n<3; n++) // copy fractions to par.
-                    par[n] = fractions[n];
+                for(n=0; n<3; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                //fractions[1] = 0.33f; //fractions[1] *= 0.95;
+                //fractions[2] = 0.33f; //fractions[2] *= 0.95;
+                //fractions[0] = 1-fractions[1]-fractions[2];
+
+                //for(n=0; n<3; n++) // copy fractions to par.
+                //    par[n] = fractions[n];
 
                 for(n=0; n<6; n++)
                 {    par[n+3] = eigenvectors[n];
@@ -595,7 +636,7 @@ public:
                     p_max3[n+3] = std::max<float>(par[n+3]*0.9f,par[n+3]*1.1f);
                 }
 
-                par[9] = lambda;
+                par[9] = lambda  + (((float) rand()/(RAND_MAX))-0.5f)/10;
 
                 mydata.n = 2; maxIteration = niter*10;
 
@@ -622,13 +663,26 @@ public:
                 }
                 break;
             case 3: // three sticks
-                fractions[1] = 0.25f; //fractions[1] *= 0.95;
-                fractions[2] = 0.25f; //fractions[2] *= 0.95;
-                fractions[3] = 0.25f; //fractions[3] *= 0.95;
-                fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
+                //fractions[1] = 0.25f; //fractions[1] *= 0.95;
+                //fractions[2] = 0.25f; //fractions[2] *= 0.95;
+                //fractions[3] = 0.25f; //fractions[3] *= 0.95;
+                //fractions[0] = 1-fractions[1]-fractions[2]-fractions[3];
 
-                for(n=0; n<4; n++) // copy fractions to par.
-                    par[n] = fractions[n];
+                //for(n=0; n<4; n++) // copy fractions to par.
+                //    par[n] = fractions[n];
+
+                sum=0.0f;
+                for(n=0; n<4; n++)
+                {
+                    if (n == 0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
+
+                for(n=0; n<4; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
 
                 for(n=0; n<9; n++) // copy eigenvectors to par.
                 {    par[n+4] = eigenvectors[n];
@@ -636,7 +690,7 @@ public:
                     p_max3[n+4] = std::max<float>(par[n+4]*0.9f,par[n+4]*1.1f);
                 }
 
-                par[13] = lambda;
+                par[13] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
 
                 mydata.n = 3; maxIteration = niter*14;
 
@@ -668,16 +722,7 @@ public:
 
         switch(min_index)
         {
-        case 0:
-            V[0] = V[1] = V[2] = 0;
-            std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
-            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
-            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
-            voxel.fr[data.voxel_index] = 0;
-            voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
-            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
-            break;
-        case 1:
+         case 1:
             V[0] = V[1] = V[2] = 0;
             std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
             std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
@@ -705,7 +750,7 @@ public:
             break;
         }
         num_fibers[data.voxel_index] = min_index;
-
+      } // if FA <0.1
         /* DTI
         if (data.space.front() != 0.0)
         {
@@ -819,7 +864,7 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
 
     if(N>=1)
     {
-        lamb = p[N*4+1];
+        lamb = p[N*4+1]/100;
         for(i=0; i<N; i++)
         {
             memset(Dm, 0, 9*sizeof(float));
@@ -860,7 +905,7 @@ void cost_function(float *p, float *hx, int m, int n, void *adata)
     }
     else
     {
-        lamb = p[1];
+        lamb = p[1]/100;
         memset(Dm, 0, 9*sizeof(float));
         Dm[0] = Dm[4] = Dm[8] = 1.0f;
         memset(Vm, 0, 9*sizeof(float));
