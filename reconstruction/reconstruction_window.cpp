@@ -298,6 +298,30 @@ void reconstruction_window::doReconstruction(unsigned char method_id,bool prompt
         handle->voxel.half_sphere = false;
         handle->voxel.scheme_balance = false;
     }
+    if(method_id == 8 || method_id == 11) // ICA
+    {
+        handle->voxel.numberOfFibers = ui->numOfFibersICA->value();
+        handle->voxel.FAth = ui->FAthICA->value();
+        handle->voxel.threeDimensionalWindow = ui->window3dICA->isChecked() ? 1 : 0;
+        handle->voxel.p_value = ui->pValueICA->value();
+    }
+    if(method_id == 9 || method_id == 12) // BSM
+    {
+        handle->voxel.numberOfFibers = ui->numOfFibersBSM->value();
+        handle->voxel.FAth = ui->FAthBSM->value();
+        handle->voxel.threeDimensionalWindow = ui->window3dBSM->isChecked() ? 1 : 0;
+        handle->voxel.mu_value = ui->muValueBSM->value();
+        handle->voxel.numberOfIterations = ui->iterationNumberBSM->value();
+    }
+    if(method_id == 10 || method_id == 13) // IDSI
+    {
+        handle->voxel.numberOfFibers = ui->numOfFibersIDSI->value();
+        handle->voxel.FAth = ui->FAthIDSI->value();
+        handle->voxel.threeDimensionalWindow = ui->window3dIDSI->isChecked() ? 1 : 0;
+        handle->voxel.mu_value = ui->muValueIDSI->value();
+        handle->voxel.numberOfIterations = ui->iterationNumberIDSI->value();
+        handle->voxel.l_value = ui->LValueIDSI->value();
+    }
 
     const char* msg = (const char*)reconstruction(handle.get(), method_id,
                                                   params,ui->check_btable->isChecked(),
@@ -404,12 +428,20 @@ void reconstruction_window::on_doDTI_clicked()
             if(!load_src(index))
                 return;
         }
-        std::fill(params,params+5,0.0);
-        if(ui->IDSI->isChecked())
-            doReconstruction(9,index+1 == filenames.size());
+        std::fill(params,params+7,0.0);
         if(ui->ICA->isChecked())
             doReconstruction(8,index+1 == filenames.size());
-        if(ui->DTI->isChecked())
+        else if(ui->BSM->isChecked())
+            doReconstruction(9,index+1 == filenames.size());
+        else if(ui->IDSI->isChecked())
+            doReconstruction(10, index+1 == filenames.size());
+        else if(ui->ICAG->isChecked())
+            doReconstruction(11, index+1 == filenames.size());
+        else if(ui->BSMG->isChecked())
+            doReconstruction(12, index+1 == filenames.size());
+        else if(ui->IDSIG->isChecked())
+            doReconstruction(13, index+1 == filenames.size());
+        else if(ui->DTI->isChecked())
             doReconstruction(1,index+1 == filenames.size());
         else
         if(ui->DSI->isChecked())
@@ -462,37 +494,9 @@ void reconstruction_window::on_DTI_toggled(bool checked)
     ui->output_jacobian->setVisible(!checked);
     ui->RecordODF->setVisible(!checked);
 
-}
-
-
-void reconstruction_window::on_ICA_toggled(bool checked)
-{
-    ui->ResolutionBox->setVisible(!checked);
-    ui->ODFSharpening->setVisible(!checked);
-    ui->DSIOption_2->setVisible(!checked);
-    ui->QBIOption_2->setVisible(!checked);
-    ui->GQIOption_2->setVisible(!checked);
-
-    ui->AdvancedOptions->setVisible(!checked);
-
-    ui->output_mapping->setVisible(!checked);
-    ui->output_jacobian->setVisible(!checked);
-    ui->RecordODF->setVisible(!checked);
-}
-
-void reconstruction_window::on_IDSI_toggled(bool checked)
-{
-    ui->ResolutionBox->setVisible(!checked);
-    ui->ODFSharpening->setVisible(!checked);
-    ui->DSIOption_2->setVisible(!checked);
-    ui->QBIOption_2->setVisible(!checked);
-    ui->GQIOption_2->setVisible(!checked);
-
-    ui->AdvancedOptions->setVisible(!checked);
-
-    ui->output_mapping->setVisible(!checked);
-    ui->output_jacobian->setVisible(!checked);
-    ui->RecordODF->setVisible(!checked);
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
 }
 
 void reconstruction_window::on_DSI_toggled(bool checked)
@@ -509,6 +513,9 @@ void reconstruction_window::on_DSI_toggled(bool checked)
     ui->output_jacobian->setVisible(!checked);
     ui->RecordODF->setVisible(checked);
 
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
 }
 
 void reconstruction_window::on_QBI_toggled(bool checked)
@@ -525,6 +532,9 @@ void reconstruction_window::on_QBI_toggled(bool checked)
     ui->output_jacobian->setVisible(!checked);
     ui->RecordODF->setVisible(checked);
 
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
 }
 
 void reconstruction_window::on_GQI_toggled(bool checked)
@@ -541,7 +551,9 @@ void reconstruction_window::on_GQI_toggled(bool checked)
     ui->output_jacobian->setVisible(!checked);
     ui->RecordODF->setVisible(checked);
 
-
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
 }
 
 void reconstruction_window::on_QDif_toggled(bool checked)
@@ -558,6 +570,119 @@ void reconstruction_window::on_QDif_toggled(bool checked)
     ui->output_jacobian->setVisible(checked);
     ui->RecordODF->setVisible(checked);
 
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
+}
+
+void reconstruction_window::on_ICA_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
+}
+
+void reconstruction_window::on_BSM_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(checked);
+    ui->IDSIOptions->setVisible(!checked);
+}
+
+void reconstruction_window::on_IDSI_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(checked);
+}
+
+void reconstruction_window::on_ICAG_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(!checked);
+}
+
+
+
+void reconstruction_window::on_BSMG_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(checked);
+    ui->IDSIOptions->setVisible(!checked);
+}
+
+void reconstruction_window::on_IDSIG_toggled(bool checked)
+{
+    ui->ResolutionBox->setVisible(!checked);
+    ui->ODFSharpening->setVisible(!checked);
+    ui->DSIOption_2->setVisible(!checked);
+    ui->QBIOption_2->setVisible(!checked);
+    ui->GQIOption_2->setVisible(!checked);
+    ui->AdvancedOptions->setVisible(!checked);
+
+    ui->output_mapping->setVisible(!checked);
+    ui->output_jacobian->setVisible(!checked);
+    ui->RecordODF->setVisible(!checked);
+
+    ui->ICAOptions->setVisible(!checked);
+    ui->BSMOptions->setVisible(!checked);
+    ui->IDSIOptions->setVisible(checked);
 }
 
 void reconstruction_window::on_remove_background_clicked()
@@ -1039,5 +1164,3 @@ void reconstruction_window::on_actionManual_Rotation_triggered()
     update_image();
     on_SlicePos_valueChanged(ui->SlicePos->value());
 }
-
-

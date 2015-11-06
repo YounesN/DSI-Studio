@@ -75,6 +75,14 @@ public:// parameters;
     unsigned char bflip; // 0 :no b_table flip 1: flip in x 2: flip in y 3: flip in z
     unsigned int max_fiber_number;
     std::vector<std::string> file_list;
+public: // parameters for ICA, BSM and IDSI
+    unsigned int numberOfFibers;
+    float FAth;
+    bool threeDimensionalWindow;
+    float p_value;
+    float mu_value;
+    unsigned int numberOfIterations;
+    unsigned int l_value;
 public:
     std::vector<image::const_pointer_image<float,3> > grad_dev;
 public:

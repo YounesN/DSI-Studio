@@ -438,8 +438,8 @@ const char* reconstruction(ImageModel* image_model,
             break;
         case 8:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
-            out << ".ica.bsm.fib.gz";
-            image_model->voxel.max_fiber_number = 3;
+            out << ".ica.fib.gz";
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
             if (!image_model->reconstruct<ica_process>(thread_count))
@@ -447,8 +447,44 @@ const char* reconstruction(ImageModel* image_model,
             break;
         case 9:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
+            out << ".ica.bsm.fib.gz";
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
+            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+                return "pre-reconstruction canceled";
+            if (!image_model->reconstruct<idsi_process>(thread_count))
+                return "reconstruction canceled";
+            break;
+        case 10:
+            image_model->voxel.recon_report << " The diffusion tensor was calculated.";
             out << ".ica.idsi.fib.gz";
-            image_model->voxel.max_fiber_number = 3;
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
+            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+                return "pre-reconstruction canceled";
+            if (!image_model->reconstruct<idsi_process>(thread_count))
+                return "reconstruction canceled";
+            break;
+        case 11:
+            image_model->voxel.recon_report << " The diffusion tensor was calculated.";
+            out << ".ica.fib.gz";
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
+            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+                return "pre-reconstruction canceled";
+            if (!image_model->reconstruct<ica_process>(thread_count))
+                return "reconstruction canceled";
+            break;
+        case 12:
+            image_model->voxel.recon_report << " The diffusion tensor was calculated.";
+            out << ".ica.bsm.fib.gz";
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
+            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+                return "pre-reconstruction canceled";
+            if (!image_model->reconstruct<idsi_process>(thread_count))
+                return "reconstruction canceled";
+            break;
+        case 13:
+            image_model->voxel.recon_report << " The diffusion tensor was calculated.";
+            out << ".ica.idsi.fib.gz";
+            image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
             if (!image_model->reconstruct<idsi_process>(thread_count))

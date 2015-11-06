@@ -150,7 +150,7 @@ public:
         a1 = 1;
         a2 = 1;
         mu = 1;
-        numOfIC = 3;
+        numOfIC = voxel.numberOfFibers;
         epsilon = 0.0001f;
         sampleSize = 1;
         maxNumIterations = 1000;
@@ -196,24 +196,20 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        //ofstream out;
-        //out.open("output.txt", ios::app);
+        int center_voxel;
 
-        bool threeDim = true;
-        int center_voxel = 4;
-
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
             center_voxel = 9;
+        else
+            center_voxel = 4;
 
         int pi, pj;
         int ica_num = 0;
-        //int stop_count = 0;
-        //int stop_flag = 0;
         itpp::mat mixedSig, icasig;
         itpp::mat icasig_no_log;
         itpp::mat mixing_matrix;
 
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
             mixedSig.set_size(19, b_count);
         else
             mixedSig.set_size(9, b_count);
@@ -228,7 +224,7 @@ public:
         j = (unsigned int) i / voxel.dim.w;
         i -= j * voxel.dim.w;
 
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
         {
             // 5 voxels behind current voxel
             if(k > 0 && j > 0)
@@ -301,7 +297,7 @@ public:
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-3;   // mu
+        opts[0] = voxel.mu_value;   // mu
         opts[1] = 1E-8;
         opts[2] = 1E-8;  // |dp|^2
         opts[3] = 1E-8;  // |e|^2
@@ -323,7 +319,7 @@ public:
         float sum;
         int result;
         int maxIteration;
-        int niter = 20;
+        int niter = voxel.numberOfIterations;
 
         // ICA variables
         arma::mat tensor_param(6,1);
@@ -368,7 +364,7 @@ public:
         d1[data.voxel_index] = (d[1]+d[2])/2.0;
 
 
-        if (data.fa[0] < 0.1)
+        if (data.fa[0] < voxel.FAth)
         {
 
             for(n=0; n<b_count; n++)

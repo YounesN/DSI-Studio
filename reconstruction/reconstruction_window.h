@@ -46,7 +46,7 @@ private:
 private:
     Ui::reconstruction_window *ui;
     std::auto_ptr<ImageModel> handle;
-    float params[5];
+    float params[7];
     image::basic_image<unsigned char, 3>dwi;
     bool load_src(int index);
     void update_dimension(void);
@@ -99,6 +99,10 @@ private slots:
     void on_actionManual_Rotation_triggered();
     void on_ICA_toggled(bool checked);
     void on_IDSI_toggled(bool checked);
+    void on_IDSIG_toggled(bool checked);
+    void on_BSMG_toggled(bool checked);
+    void on_ICAG_toggled(bool checked);
+    void on_BSM_toggled(bool checked);
 };
 
 #endif // RECONSTRUCTION_WINDOW_H

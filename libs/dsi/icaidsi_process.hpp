@@ -22,19 +22,6 @@ struct UserDataIDSI {
 
 void cost_function_idsi(float *p, float *hx, int m, int n, void *adata);
 
-void printToFile(ofstream &out, float *data, int size, string message)
-{
-    int i;
-    out << "------------------" << message << "------------------" << std::endl;
-    for(i=0; i<size; i++)
-    {
-        out << data[i] << " ";
-        if((i+1)%10==0)
-            out << std::endl;
-    }
-    out << std::endl;
-}
-
 class ICAIDSI : public BaseProcess
 {
 private:
@@ -193,7 +180,7 @@ public:
         a1 = 1;
         a2 = 1;
         mu = 1;
-        numOfIC = 3;
+        numOfIC = voxel.numberOfFibers;
         epsilon = 0.0001f;
         sampleSize = 1;
         maxNumIterations = 1000;
@@ -241,24 +228,20 @@ public:
 public:
     virtual void run(Voxel& voxel, VoxelData& data)
     {
-        //ofstream out;
-        //out.open("output.txt", ios::app);
+        int center_voxel;
 
-        bool threeDim = true;
-        int center_voxel = 4;
-
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
             center_voxel = 9;
+        else
+            center_voxel = 4;
 
         int pi, pj;
         int ica_num = 0;
-        //int stop_count = 0;
-        //int stop_flag = 0;
         itpp::mat mixedSig, icasig;
         itpp::mat icasig_no_log;
         itpp::mat mixing_matrix;
 
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
             mixedSig.set_size(19, b_count);
         else
             mixedSig.set_size(9, b_count);
@@ -273,10 +256,7 @@ public:
         j = (unsigned int) i / voxel.dim.w;
         i -= j * voxel.dim.w;
 
-        //out << "====================================================" << std::endl;
-        //out << "i= " << i << ", j= " << j << ", k= " << k << std::endl;
-
-        if(threeDim)
+        if(voxel.threeDimensionalWindow)
         {
             // 5 voxels behind current voxel
             if(k > 0 && j > 0)
@@ -350,7 +330,7 @@ public:
         int b_count = voxel.bvalues.size()-1;
         int min_index = -1;
         float opts[LM_OPTS_SZ];
-        opts[0] = 1E-1;    // mu
+        opts[0] = voxel.mu_value;    // mu
         opts[1] = 1E-6;
         opts[2] = 1E-6;   // |dp|^2
         opts[3] = 1E-6;   // |e|^2
@@ -384,7 +364,7 @@ public:
         float IA_best[4];
         int result;
         int maxIteration;
-        int niter = 20;
+        int niter = voxel.numberOfIterations;
 
         // ICA variables
         arma::mat tensor_param(6,1);
