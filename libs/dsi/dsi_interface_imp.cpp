@@ -28,6 +28,8 @@
 #include "odf_decomposition.hpp"
 #include "image_model.hpp"
 
+#include "cuda.h"
+
 typedef boost::mpl::vector<
     ReadDWIData,
     Dwi2Tensor
@@ -41,12 +43,21 @@ typedef boost::mpl::vector<
 typedef boost::mpl::vector<
     ReadDWIData,
     ICABSM
+> icabsm_process;
+
+typedef boost::mpl::vector<
+    ReadDWIData,
+    ICA
 > ica_process;
 
 typedef boost::mpl::vector<
     ReadDWIData,
     ICAIDSI
 > idsi_process;
+
+typedef boost::mpl::vector<
+    ReadDWIData
+> gpu_preprocess;
 
 
 template<typename reco_type>
@@ -451,7 +462,7 @@ const char* reconstruction(ImageModel* image_model,
             image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
-            if (!image_model->reconstruct<idsi_process>(thread_count))
+            if (!image_model->reconstruct<icabsm_process>(thread_count))
                 return "reconstruction canceled";
             break;
         case 10:
@@ -467,10 +478,9 @@ const char* reconstruction(ImageModel* image_model,
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
             out << ".ica.fib.gz";
             image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
-            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+            if (!image_model->reconstruct<gpu_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
-            if (!image_model->reconstruct<ica_process>(thread_count))
-                return "reconstruction canceled";
+            icabsm_device_memory_allocation(image_model->voxel);
             break;
         case 12:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
@@ -478,7 +488,7 @@ const char* reconstruction(ImageModel* image_model,
             image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
             if (!image_model->reconstruct<ica_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
-            if (!image_model->reconstruct<idsi_process>(thread_count))
+            if (!image_model->reconstruct<icabsm_process>(thread_count))
                 return "reconstruction canceled";
             break;
         case 13:
@@ -724,4 +734,28 @@ const char* odf_average(const char* out_name,const char* const * file_names,unsi
     output_odfs(mask,out_name,".mean.odf.fib.gz",odfs,ti,vs,mni,report);
     output_odfs(mask,out_name,".mean.fib.gz",odfs,ti,vs,mni,report,false);
     return 0;
+}
+
+void icabsm_device_memory_allocation(Voxel &voxel)
+{
+    unsigned int b_count = voxel.bvalues.size() - 1;
+    cudaMalloc((void **) &voxel.dev_md, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_d0, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_d1, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_num_fibers, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_fr, voxel.numberOfFibers * voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_fib_fa, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_fib_dir, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_g_dg, b_count * 6 * sizeof(float));
+    cudaMalloc((void **) &voxel.dev_invg_dg, b_count * 6 * sizeof(float));
+}
+
+void ICABSMInit()
+{
+
+}
+
+void ICABSMOutput()
+{
+
 }

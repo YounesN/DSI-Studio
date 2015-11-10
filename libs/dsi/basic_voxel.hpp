@@ -121,6 +121,16 @@ public:
     std::vector<VoxelData> voxel_data;
 public:
     std::vector<std::vector<float>> signalData;
+public: // used in GPU (device memory)
+    float *dev_md;
+    float *dev_d0;
+    float *dev_d1;
+    float *dev_num_fibers;
+    float *dev_fr;
+    float *dev_fib_fa;
+    float *dev_fib_dir;
+    float *dev_g_dg;
+    float *dev_invg_dg;
 public:
     ImageModel* image_model;
 public:
