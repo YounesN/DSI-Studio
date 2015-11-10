@@ -168,8 +168,8 @@ public:
 
         float eigenvectors[9];
         float fractions[4];
-        float var21 = 5.780f; // input variable
-        float var32 = 5.926f; // input variable
+        float var21; // input variable
+        float var32; // input variable
         float *x = new float[b_count];
         unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
         double sum = 0;
@@ -195,6 +195,47 @@ public:
         arma::mat input3(3,b_count);
 
         std::vector<float> signal(b_count);
+
+        if(voxel.p_value == 0.1f)
+        {
+            var21 = 2.575f;
+            var32 = 2.606f;
+        }
+        else if (voxel.p_value == 0.05f)
+        {
+            var21 = 3.4668f;
+            var32 = 3.522f;
+        }
+        else if (voxel.p_value == 0.01f)
+        {
+            var21 = 5.78f;
+            var32 = 5.926f;
+        }
+        else if (voxel.p_value == 0.005f)
+        {
+            var21 = 6.89f;
+            var32 = 7.093f;
+        }
+        else if (voxel.p_value == 0.003f)
+        {
+            var21 = 7.76f;
+            var32 = 8.01f;
+        }
+        else if (voxel.p_value == 0.002f)
+        {
+            var21 = 8.48f;
+            var32 = 8.77f;
+        }
+        else if (voxel.p_value == 0.001f)
+        {
+            var21 = 9.78f;
+            var32 = 10.16f;
+        }
+        else
+        {
+            printf("Not supported p-value\n");
+        }
+
 
         if(voxel.threeDimensionalWindow)
             mixedSig.set_size(19, b_count);
@@ -309,9 +350,9 @@ public:
             d[2] = 0.0;
         }
         data.fa[0] = voxel.fib_fa[data.voxel_index] = get_fa(d[0], d[1], d[2]);
-        md[data.voxel_index] = 1000.0*(d[0]+d[1]+d[2])/3.0;
-        d0[data.voxel_index] = 1000.0*d[0];
-        d1[data.voxel_index] = 1000.0*(d[1]+d[2])/2.0;
+        md[data.voxel_index] = (d[0]+d[1]+d[2])/3.0;
+        d0[data.voxel_index] = d[0];
+        d1[data.voxel_index] = (d[1]+d[2])/2.0;
 
 
         if (data.fa[0] < voxel.FAth)
