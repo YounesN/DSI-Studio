@@ -49,6 +49,33 @@ struct VoxelData
     }
 };
 
+struct GpuData
+{
+public: // used in GPU (device memory)
+    float *dev_md;
+    float *dev_d0;
+    float *dev_d1;
+    float *dev_num_fibers;
+    float *dev_fr;
+    float *dev_fib_fa;
+    float *dev_fib_dir;
+    float *dev_g_dg;
+    float *dev_invg_dg;
+    float *dev_p_min0;
+    float *dev_p_max0;
+    float *dev_p_min1;
+    float *dev_p_max1;
+    float *dev_p_min2;
+    float *dev_p_max2;
+    float *dev_p_min3;
+    float *dev_p_max3;
+    float *dev_A0;
+    float *dev_A1;
+    float *dev_A2;
+    float *dev_A3;
+    float *dev_signalData;
+};
+
 class Voxel : public boost::noncopyable
 {
 private:
@@ -108,6 +135,8 @@ public: // gradient and B tables
     arma::mat matg_dg;
     std::vector<float> invg_dg;
     arma::mat matinvg_dg;
+public: // used in GPU (device memory)
+    GpuData gpu;
 public:
     float z0;
     // other information for second pass processing
@@ -121,16 +150,6 @@ public:
     std::vector<VoxelData> voxel_data;
 public:
     std::vector<std::vector<float>> signalData;
-public: // used in GPU (device memory)
-    float *dev_md;
-    float *dev_d0;
-    float *dev_d1;
-    float *dev_num_fibers;
-    float *dev_fr;
-    float *dev_fib_fa;
-    float *dev_fib_dir;
-    float *dev_g_dg;
-    float *dev_invg_dg;
 public:
     ImageModel* image_model;
 public:

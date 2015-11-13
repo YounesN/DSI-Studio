@@ -28,7 +28,9 @@
 #include "odf_decomposition.hpp"
 #include "image_model.hpp"
 
+#include "cuda_runtime.h"
 #include "cuda.h"
+void icabsm_device_memory_allocation(Voxel &voxel);
 
 typedef boost::mpl::vector<
     ReadDWIData,
@@ -56,7 +58,8 @@ typedef boost::mpl::vector<
 > idsi_process;
 
 typedef boost::mpl::vector<
-    ReadDWIData
+    ReadDWIData,
+    ProcessSignal
 > gpu_preprocess;
 
 
@@ -739,20 +742,36 @@ const char* odf_average(const char* out_name,const char* const * file_names,unsi
 void icabsm_device_memory_allocation(Voxel &voxel)
 {
     unsigned int b_count = voxel.bvalues.size() - 1;
-    cudaMalloc((void **) &voxel.dev_md, voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_d0, voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_d1, voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_num_fibers, voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_fr, voxel.numberOfFibers * voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_fib_fa, voxel.dim.size() * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_fib_dir, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_g_dg, b_count * 6 * sizeof(float));
-    cudaMalloc((void **) &voxel.dev_invg_dg, b_count * 6 * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_md, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_num_fibers, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_fr, voxel.numberOfFibers * voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_fib_dir, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_g_dg, b_count * 6 * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_signalData, b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d);
 }
 
-void ICABSMInit()
+void ICABSMInit(Voxel &voxel)
 {
+    int i,j;
+    unsigned int b_count = voxel.bvalues.size() - 1;
 
+    // copy signal data
+    float * tmpsignalData;
+    tmpsignalData = (float *)malloc(b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d * sizeof(float));
+    for(i=0; i<voxel.dim.w * voxel.dim.h * voxel.dim.d; i++)
+    {
+        for(j=0; j<b_count; j++)
+        {
+            tmpsignalData[i*b_count+j] = voxel.signalData[i][j];
+        }
+    }
+    cudaMemcpy(voxel.gpu.dev_signalData, tmpsignalData,
+               b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d * sizeof(float),
+               cudaMemcpyHostToDevice);
 }
 
 void ICABSMOutput()
