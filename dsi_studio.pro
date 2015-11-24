@@ -103,7 +103,8 @@ HEADERS += mainwindow.h \
     libs/dsi/ica_process.hpp \
     libs/dsi/sig_process.hpp \
     libs/dsi/icabsm_process.hpp \
-    libs/dsi/icaidsi_process.hpp
+    libs/dsi/icaidsi_process.hpp \
+    cudaKernels.h
 
 FORMS += mainwindow.ui \
     tracking/tracking_window.ui \
@@ -216,53 +217,8 @@ win32:!win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/levmar.lib
 else:win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/liblevmar.a
 
 
-# CUDA library
-DISTFILES += \
-    cudaKernels.cu
-
+# CUDA Library
 CUDA_SOURCES += cudaKernels.cu
-CUDA_DIR = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v7.0"
-SYSTEM_NAME = Win32
-SYSTEM_TYPE = 32
-CUDA_ARCH = compute_20
-NVCC_OPTIONS = --use_fast_math
-
-INCLUDEPATH += $$CUDA_DIR/include
-QMAKE_LIBDIR += $$CUDA_DIR/lib/$$SYSTEM_NAME
-
-LIBS += -cuda -cudart
-# The following makes sure all path names (which often include spaces) are put between quotation marks
-CUDA_INC = $$join(INCLUDEPATH,'" -I"','-I"','"')
-
-
-CONFIG(debug, debug|release) {
-    # Debug mode
-    cuda_d.input = CUDA_SOURCES
-    cuda_d.output = $$CUDA_OBJECTS_DIR/${QMAKE_FILE_BASE}_cuda.o
-    cuda_d.commands = $$CUDA_DIR/bin/nvcc.exe -D_DEBUG $$NVCC_OPTIONS $$CUDA_INC $$LIBS --machine $$SYSTEM_TYPE -arch=$$CUDA_ARCH -c -o ${QMAKE_FILE_OUT} ${QMAKE_FILE_NAME}
-    cuda_d.dependency_type = TYPE_C
-    QMAKE_EXTRA_COMPILERS += cuda_d
-}
-else {
-    # Release mode
-    cuda.input = CUDA_SOURCES
-    cuda.output = $$CUDA_OBJECTS_DIR/${QMAKE_FILE_BASE}_cuda.o
-    cuda.commands = $$CUDA_DIR/bin/nvcc.exe $$NVCC_OPTIONS $$CUDA_INC $$LIBS --machine $$SYSTEM_TYPE -arch=$$CUDA_ARCH -c -o ${QMAKE_FILE_OUT} ${QMAKE_FILE_NAME}
-    cuda.dependency_type = TYPE_C
-    QMAKE_EXTRA_COMPILERS += cuda
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+OTHER_FILES += cudaKernels.cu
+INCLUDEPATH += "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/include"
+LIBS += -L"C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v7.0/lib/Win32" -lcuda -lcudart

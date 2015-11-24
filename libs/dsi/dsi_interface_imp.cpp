@@ -27,10 +27,15 @@
 #include "odf_deconvolusion.hpp"
 #include "odf_decomposition.hpp"
 #include "image_model.hpp"
+#include "armadillo"
 
+#include "cudaKernels.h"
 #include "cuda_runtime.h"
 #include "cuda.h"
+
 void icabsm_device_memory_allocation(Voxel &voxel);
+void ICABSMInit(Voxel &voxel);
+void ICABSMOutput(Voxel &voxel, gz_mat_write& mat_writer);
 
 typedef boost::mpl::vector<
     ReadDWIData,
@@ -351,8 +356,8 @@ const char* reconstruction(ImageModel* image_model,
             }
         }
 
-
-
+        std::string gpu_output_name = image_model->file_name;
+        gz_mat_write gpu_mat_writer(gpu_output_name.c_str());
 
         switch (method_id)
         {
@@ -489,10 +494,12 @@ const char* reconstruction(ImageModel* image_model,
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
             out << ".ica.bsm.fib.gz";
             image_model->voxel.max_fiber_number = image_model->voxel.numberOfFibers;
-            if (!image_model->reconstruct<ica_preprocess>(thread_count))
+            if (!image_model->reconstruct<gpu_preprocess>(thread_count))
                 return "pre-reconstruction canceled";
-            if (!image_model->reconstruct<icabsm_process>(thread_count))
-                return "reconstruction canceled";
+            icabsm_device_memory_allocation(image_model->voxel);
+            ICABSMInit(image_model->voxel);
+            LaunchICABSMKernel(image_model->voxel);
+            ICABSMOutput(image_model->voxel, gpu_mat_writer);
             break;
         case 13:
             image_model->voxel.recon_report << " The diffusion tensor was calculated.";
@@ -752,6 +759,8 @@ void icabsm_device_memory_allocation(Voxel &voxel)
     cudaMalloc((void **) &voxel.gpu.dev_g_dg, b_count * 6 * sizeof(float));
     cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float));
     cudaMalloc((void **) &voxel.gpu.dev_signalData, b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d);
+    cudaMalloc((void **) &voxel.gpu.dev_matg_dg, b_count * 6 * sizeof(float));
+    cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float));
 }
 
 void ICABSMInit(Voxel &voxel)
@@ -772,9 +781,68 @@ void ICABSMInit(Voxel &voxel)
     cudaMemcpy(voxel.gpu.dev_signalData, tmpsignalData,
                b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d * sizeof(float),
                cudaMemcpyHostToDevice);
+
+    // copy g_dg and pseudo inverse of it
+    float * tmp_g_dg = new float[b_count * 6];
+    float * tmp_invg_dg = new float[b_count * 6];
+    voxel.matg_dg.set_size(b_count, 6);
+    voxel.invg_dg.clear();
+    voxel.invg_dg.resize(6*b_count);
+    for(i=0; i<b_count; i++)
+    {
+        voxel.matg_dg(i,0) = voxel.g_dg[6*i+0] = voxel.bvectors[i+1][0]*voxel.bvectors[i+1][0];
+        voxel.matg_dg(i,1) = voxel.g_dg[6*i+1] = voxel.bvectors[i+1][1]*voxel.bvectors[i+1][1];
+        voxel.matg_dg(i,2) = voxel.g_dg[6*i+2] = voxel.bvectors[i+1][2]*voxel.bvectors[i+1][2];
+        voxel.matg_dg(i,3) = voxel.g_dg[6*i+3] = voxel.bvectors[i+1][0]*voxel.bvectors[i+1][1]*2;
+        voxel.matg_dg(i,4) = voxel.g_dg[6*i+4] = voxel.bvectors[i+1][0]*voxel.bvectors[i+1][2]*2;
+        voxel.matg_dg(i,5) = voxel.g_dg[6*i+5] = voxel.bvectors[i+1][1]*voxel.bvectors[i+1][2]*2;
+    }
+    arma::mat ones;
+    ones.ones(1,6);
+    arma::mat bvalue(b_count,1);
+    for(i=0; i<b_count; i++)
+        bvalue(i, 0) = voxel.bvalues[i+1];
+    bvalue = bvalue * ones;
+    for(i=0;i<b_count;i++)
+        for(j=0;j<6;j++)
+            voxel.matg_dg(i,j)*=bvalue(i,j);
+    voxel.matinvg_dg = arma::pinv(voxel.matg_dg);
+    //voxel.matinvg_dg = -voxel.matinvg_dg;
+    for(i=0; i<b_count; i++)
+    {
+        for(j=0; j<6; j++)
+        {
+            tmp_g_dg[6*i + j] = voxel.matg_dg(i, j);
+            tmp_invg_dg[j*b_count+i] = voxel.matinvg_dg(j, i);
+        }
+    }
+    cudaMemcpy(voxel.gpu.dev_g_dg, tmp_g_dg, b_count * 6 * sizeof(float),
+               cudaMemcpyHostToDevice);
+    cudaMemcpy(voxel.gpu.dev_invg_dg, tmp_invg_dg, b_count * 6 * sizeof(float),
+               cudaMemcpyHostToDevice);
+    delete [] tmp_g_dg;
+    delete [] tmp_invg_dg;
 }
 
-void ICABSMOutput()
+void ICABSMOutput(Voxel &voxel, gz_mat_write& mat_writer)
 {
+    unsigned int i=0;
+    float *tmp_fib_fa = new float[voxel.dim.size()];
+    float *tmp_md = new float[voxel.dim.size()];
+    float *tmp_d0 = new float[voxel.dim.size()];
+    float *tmp_d1 = new float[voxel.dim.size()];
+    cudaMemcpy(tmp_fib_fa, voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(tmp_md, voxel.gpu.dev_md, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(tmp_d0, voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(tmp_d1, voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
 
+    mat_writer.write("gfa", tmp_fib_fa, 1, voxel.dim.size());
+    mat_writer.write("adc", tmp_md, 1, voxel.dim.size());
+    mat_writer.write("axial_dif", tmp_d0, 1, voxel.dim.size());
+    mat_writer.write("radial_dif", tmp_d1, 1, voxel.dim.size());
+
+    delete [] tmp_fib_fa;
+    delete [] tmp_md;
+    delete [] tmp_d0;
+    delete [] tmp_d1;
 }
