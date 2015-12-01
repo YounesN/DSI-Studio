@@ -1,7 +1,25 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include "cudaKernels.h"
-#include "basic_voxel.hpp"
+#include <stdio.h>
+
+__global__ void icabsm_kernel(bool threeDim,
+                              int b_count,
+                              int width,
+                              int height,
+                              int depth,
+                              float *dev_md,
+                              float *dev_d0,
+                              float *dev_d1,
+                              float *dev_num_fibers,
+                              float *dev_fr,
+                              float *dev_fib_fa,
+                              float *dev_fib_dir,
+                              float *dev_g_dg,
+                              float *dev_invg_dg,
+                              float *dev_signalData,
+                              char *dev_mask,
+                              float *dev_mixedSig);
+
 
 __device__ void gpu_set_mat_row(float *a, float *b, int size)
 {
@@ -16,7 +34,7 @@ __device__ void gpu_set_mat_row(float *a, float *b, int size)
  * b: jxk -> input
  * c: ixk -> output
  */
-__device__ void gpu_matrix_multiplication(float *a, float *b, float *c, int i, int j, int k)
+__device__ void gpu_matrix_multiplication(float *a, float *b, double *c, int i, int j, int k)
 {
     memset(c, 0, i*k*sizeof(float));
     int row, col, inner;
@@ -72,6 +90,7 @@ __device__ void eigen_decomposition_sym(double * A,
                                     double * V,
                                     double * d,const int row_count, const int col_count)
 {
+    //printf("hello from eigen_decomposition_sym\n");
     int iter;
     if(col_count == 3)
     {
@@ -352,23 +371,52 @@ __device__ void eigen_decomposition_sym(double * A,
     delete [] e;
 }
 
-void LaunchICABSMKernel(Voxel &voxel)
+extern "C"
+void LaunchICABSMKernel(bool threeDim,
+                        int b_count,
+                        int width,
+                        int height,
+                        int depth,
+                        float *dev_md,
+                        float *dev_d0,
+                        float *dev_d1,
+                        float *dev_num_fibers,
+                        float *dev_fr,
+                        float *dev_fib_fa,
+                        float *dev_fib_dir,
+                        float *dev_g_dg,
+                        float *dev_invg_dg,
+                        float *dev_signalData,
+                        char *dev_mask,
+                        float *dev_mixedSig)
 {
-    icabsm_kernel<<<1, voxel.dim.size()>>>(voxel.threeDimensionalWindow,
-                                           voxel.bvalues.size()-1,
-                                           voxel.dim.width(),
-                                           voxel.dim.height(),
-                                           voxel.dim.depth(),
-                                           voxel.gpu.dev_md,
-                                           voxel.gpu.dev_d0,
-                                           voxel.gpu.dev_d1,
-                                           voxel.gpu.dev_num_fibers,
-                                           voxel.gpu.dev_fr,
-                                           voxel.gpu.dev_fib_fa,
-                                           voxel.gpu.dev_fib_dir,
-                                           voxel.gpu.dev_g_dg,
-                                           voxel.gpu.dev_invg_dg,
-                                           voxel.gpu.dev_signalData);
+    /*dim3 blockDim(4, 4, 4);
+    dim3 gridDim((width + blockDim.z - 1)/ blockDim.z,
+                 (height + blockDim.y - 1) / blockDim.y,
+                 (depth + blockDim.z - 1) / blockDim.z);*/
+    int threadPerBlock = 128;
+    int blocksPerGrid = width * height * depth / threadPerBlock;
+    icabsm_kernel<<<blocksPerGrid, threadPerBlock>>>(threeDim,
+                                                     b_count,
+                                                     width,
+                                                     height,
+                                                     depth,
+                                                     dev_md,
+                                                     dev_d0,
+                                                     dev_d1,
+                                                     dev_num_fibers,
+                                                     dev_fr,
+                                                     dev_fib_fa,
+                                                     dev_fib_dir,
+                                                     dev_g_dg,
+                                                     dev_invg_dg,
+                                                     dev_signalData,
+                                                     dev_mask,
+                                                     dev_mixedSig);
+    cudaError_t err = cudaGetLastError();
+    if(err != cudaSuccess)
+        printf("Error: %s\n", cudaGetErrorString(err));
+    cudaDeviceSynchronize();
 }
 
 __global__ void icabsm_kernel(bool threeDim,
@@ -385,16 +433,26 @@ __global__ void icabsm_kernel(bool threeDim,
                               float *dev_fib_dir,
                               float *dev_g_dg,
                               float *dev_invg_dg,
-                              float *dev_signalData)
+                              float *dev_signalData,
+                              char *dev_mask,
+                              float *dev_mixedSig)
 {
     unsigned int i=0, j=0, k=0;
     int m=0, n=0;
-    float *mixedSig;
+    int blockId = blockIdx.x + blockIdx.y * gridDim.x
+                  + gridDim.x * gridDim.y * blockIdx.z;
+    int threadID = blockId * (blockDim.x * blockDim.y * blockDim.z)
+                   + (threadIdx.z * (blockDim.x * blockDim.y))
+                   + (threadIdx.y * blockDim.x) + threadIdx.x;
+
+    if(!dev_mask[threadID])
+        return;
+
+    int mixedSigSize;
     if(threeDim)
-        mixedSig = new float[19 * b_count];
+        mixedSigSize = 19;
     else
-        mixedSig = new float[9 * b_count];
-    unsigned int threadID = blockIdx.x *blockDim.x + threadIdx.x;
+        mixedSigSize = 9;
 
     /* get 3d position */
     i = threadID;
@@ -407,70 +465,80 @@ __global__ void icabsm_kernel(bool threeDim,
     {
         // 5 voxels behind current voxel
         if(k > 0 && j > 0)
-            gpu_set_mat_row(mixedSig, dev_signalData+((threadID-width*height-width) * b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize, dev_signalData+((threadID-width*height-width) * b_count), b_count);
+        __syncthreads();
         if(k > 0 && i > 0)
-            gpu_set_mat_row(mixedSig+b_count, dev_signalData+((threadID-width*height-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+b_count, dev_signalData+((threadID-width*height-1)*b_count), b_count);
         if(k > 0)
-            gpu_set_mat_row(mixedSig+2*b_count, dev_signalData+((threadID-width*height)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+2*b_count, dev_signalData+((threadID-width*height)*b_count), b_count);
         if(k > 0 && i < width - 1)
-            gpu_set_mat_row(mixedSig+3*b_count, dev_signalData+((threadID-width*height+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+3*b_count, dev_signalData+((threadID-width*height+1)*b_count), b_count);
         if(k > 0 && j < height - 1)
-            gpu_set_mat_row(mixedSig+4*b_count, dev_signalData+((threadID-width*height+width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+4*b_count, dev_signalData+((threadID-width*height+width)*b_count), b_count);
+        //printf("%f\n", *(mixedSig+4*b_count));
 
         // current flat 9 voxels
         if(i > 0 && j > 0)
-            gpu_set_mat_row(mixedSig+5*b_count, dev_signalData+((threadID-width-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+5*b_count, dev_signalData+((threadID-width-1)*b_count), b_count);
         if(j > 0)
-            gpu_set_mat_row(mixedSig+6*b_count, dev_signalData+((threadID-width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+6*b_count, dev_signalData+((threadID-width)*b_count), b_count);
         if(i < width - 1 && j > 0 )
-            gpu_set_mat_row(mixedSig+7*b_count, dev_signalData+((threadID-width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+7*b_count, dev_signalData+((threadID-width+1)*b_count), b_count);
         if(i > 0)
-            gpu_set_mat_row(mixedSig+8*b_count, dev_signalData+((threadID-1)*b_count), b_count);
-        gpu_set_mat_row(mixedSig+9*b_count, dev_signalData+(threadID*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+8*b_count, dev_signalData+((threadID-1)*b_count), b_count);
+        gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+9*b_count, dev_signalData+(threadID*b_count), b_count);
         if(i < width - 1)
-            gpu_set_mat_row(mixedSig+10*b_count, dev_signalData+((threadID+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+10*b_count, dev_signalData+((threadID+1)*b_count), b_count);
         if(i > 0 && j < height - 1)
-            gpu_set_mat_row(mixedSig+11*b_count, dev_signalData+((threadID+width-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+11*b_count, dev_signalData+((threadID+width-1)*b_count), b_count);
         if(j < height - 1 )
-            gpu_set_mat_row(mixedSig+12*b_count, dev_signalData+((threadID+width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+12*b_count, dev_signalData+((threadID+width)*b_count), b_count);
         if(i < width - 1 && j < height - 1)
-            gpu_set_mat_row(mixedSig+13*b_count, dev_signalData+((threadID+width+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+13*b_count, dev_signalData+((threadID+width+1)*b_count), b_count);
 
         // 5 voxels in front of current voxel
         if(k < depth - 1 && j > 0)
-            gpu_set_mat_row(mixedSig+14*b_count, dev_signalData+((threadID+width*height-width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+14*b_count, dev_signalData+((threadID+width*height-width)*b_count), b_count);
         if(k < depth - 1 && i > 0)
-            gpu_set_mat_row(mixedSig+15*b_count, dev_signalData+((threadID+width*height-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+15*b_count, dev_signalData+((threadID+width*height-1)*b_count), b_count);
         if(k < depth - 1)
-            gpu_set_mat_row(mixedSig+16*b_count, dev_signalData+((threadID+width*height)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+16*b_count, dev_signalData+((threadID+width*height)*b_count), b_count);
         if(k < depth - 1 && i < width - 1)
-            gpu_set_mat_row(mixedSig+17*b_count, dev_signalData+((threadID+width*height+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+17*b_count, dev_signalData+((threadID+width*height+1)*b_count), b_count);
         if(k < depth - 1 && j < height - 1)
-            gpu_set_mat_row(mixedSig+18*b_count, dev_signalData+((threadID+width*height+width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+18*b_count, dev_signalData+((threadID+width*height+width)*b_count), b_count);
     }
     else
     {
         if(i > 0 && j > 0)
-            gpu_set_mat_row(mixedSig, dev_signalData+((threadID-width-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize, dev_signalData+((threadID-width-1)*b_count), b_count);
         if(j > 0)
-            gpu_set_mat_row(mixedSig+b_count, dev_signalData+((threadID-width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+b_count, dev_signalData+((threadID-width)*b_count), b_count);
         if(i < width - 1 && j > 0)
-            gpu_set_mat_row(mixedSig+2*b_count, dev_signalData+((threadID-width+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+2*b_count, dev_signalData+((threadID-width+1)*b_count), b_count);
         if(i > 0)
-            gpu_set_mat_row(mixedSig+3*b_count, dev_signalData+((threadID-1)*b_count), b_count);
-        gpu_set_mat_row(mixedSig+4*b_count, dev_signalData+(threadID*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+3*b_count, dev_signalData+((threadID-1)*b_count), b_count);
+        gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+4*b_count, dev_signalData+(threadID*b_count), b_count);
         if(i < width - 1)
-            gpu_set_mat_row(mixedSig+5*b_count, dev_signalData+((threadID+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+5*b_count, dev_signalData+((threadID+1)*b_count), b_count);
         if(i > 0 && j < height - 1)
-            gpu_set_mat_row(mixedSig+6*b_count, dev_signalData+((threadID+width-1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+6*b_count, dev_signalData+((threadID+width-1)*b_count), b_count);
         if(j < height - 1 )
-            gpu_set_mat_row(mixedSig+7*b_count, dev_signalData+((threadID+width)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+7*b_count, dev_signalData+((threadID+width)*b_count), b_count);
         if(i < width - 1 && j < height - 1)
-            gpu_set_mat_row(mixedSig+8*b_count, dev_signalData+((threadID+width+1)*b_count), b_count);
+            gpu_set_mat_row(dev_mixedSig+threadID*b_count*mixedSigSize+8*b_count, dev_signalData+((threadID+width+1)*b_count), b_count);
     }
 
+    dev_fib_fa[threadID] = 0.5;
+    dev_fib_dir[3*threadID] = 0.5;
+    dev_fib_dir[3*threadID+1] = 0.5;
+    dev_fib_dir[3*threadID+2] = 0.5;
+    dev_md[threadID] = 0.5;
+    dev_d0[threadID] =  0.5;
+    dev_d1[threadID] = 0.5;
+
     // DTI
-    float *signal = new float [b_count-1];
+    /*float *signal = new float [b_count-1];
     float *space = new float [b_count];
     double tensor[9];
     double V[9],d[3];
@@ -485,7 +553,7 @@ __global__ void icabsm_kernel(bool threeDim,
     gpu_matrix_multiplication(dev_invg_dg, signal, tensor_param, 6, 64, 1);
     unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
     for(unsigned int index = 0; index < 9; index++)
-        tensor[index] = tensor_param(tensor_index[index],0);
+        tensor[index] = tensor_param[tensor_index[index]];
     eigen_decomposition_sym(tensor,V,d,3, 3);
     if (d[1] < 0.0)
     {
@@ -500,12 +568,342 @@ __global__ void icabsm_kernel(bool threeDim,
         d[1] = 0.0;
         d[2] = 0.0;
     }
+
+    dev_fib_dir[3*threadID] = V[0];
+    dev_fib_dir[3*threadID+1] = V[1];
+    dev_fib_dir[3*threadID+2] = V[2];
     dev_fib_fa[threadID] = gpu_get_fa(d[0], d[1], d[2]);
+    printf("fib_fa: %f", dev_fib_fa[threadID]);
     dev_md[threadID] = (d[0]+d[1]+d[2])/3.0;
     dev_d0[threadID] =  d[0];
     dev_d1[threadID] = (d[1]+d[2])/2.0;
 
-    delete [] signal;
-    delete [] space;
-    delete [] mixedSig;
+
+    if (data.fa[0] < voxel.FAth)
+    {
+
+        for(n=0; n<b_count; n++)
+        {
+            x[n] = mixedSig(center_voxel,n);
+            xstar[n] = mixedSig(center_voxel,n);
+            mydata.x[n] = mixedSig(center_voxel,n);
+            weight0[n]= (b_count-2+1)/(x[n]*x[n]);
+        }
+
+            par[0] = 0.5f;
+            par[1] = lambda;
+            mydata.n = 0; maxIteration = niter*1;
+
+            result = slevmar_blec_dif(&cost_function, par, x, 2, b_count, p_min0, p_max0, A0, B1, 1, weight0, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+
+            e[ica_num] = info[1];
+            SC[ica_num] = logf(e[ica_num]/b_count)+1*logf(b_count)/b_count;
+
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V, V+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            voxel.fr[data.voxel_index] = 0;
+            voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
+            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+
+    }
+    else
+    {
+      for(ica_num = 1; ica_num <=3; ica_num++)
+      {
+        float eigenvectors[9]; // BSM
+        float fractions[4]; // BSM
+        numOfIC = ica_num;
+
+            if(ica_num == 1 || ica_num == 3)
+                g = FICA_NONLIN_POW3;
+            else
+                g = FICA_NONLIN_TANH;
+
+            itpp::Fast_ICA fi(mixedSig);
+            fi.set_approach(approach);
+            fi.set_nrof_independent_components(numOfIC);
+            fi.set_non_linearity(g);
+            fi.set_fine_tune(finetune);
+            fi.set_a1(a1);
+            fi.set_a2(a2);
+            fi.set_mu(mu);
+            fi.set_epsilon(epsilon);
+            fi.set_sample_size(sampleSize);
+            fi.set_stabilization(stabilization);
+            fi.set_max_num_iterations(maxNumIterations);
+            fi.set_max_fine_tune(maxFineTune);
+            fi.set_first_eig(firstEig);
+            fi.set_last_eig(lastEig);
+            fi.set_pca_only(PCAonly);
+
+            try{
+                fi.separate();
+            }
+            catch(...)
+            {
+                qDebug() << "Exception!!!.";
+            }
+
+            icasig = fi.get_independent_components();
+            icasig_no_log.set_size(icasig.rows(), icasig.cols());
+            icasig_no_log = icasig;
+            mixing_matrix = fi.get_mixing_matrix();
+
+            if(icasig.rows() < ica_num) // Add zero if the number of ICA signal is less than number of fibers
+            {
+                icasig.set_size(ica_num, icasig.cols());
+                itpp::vec tmp(icasig.cols());
+                tmp.zeros();
+                for(m = icasig.rows(); m < ica_num-1; m++)
+                {
+                    icasig.set_col(m, tmp);
+                }
+            }
+
+            for(m = 0; m < icasig.rows(); m++)
+            {
+                double sum = 0;
+                for(n=0;n<icasig.cols();n++)
+                    sum+=icasig.get(m,n);
+                if(sum<0)
+                {
+                    for(n=0;n<icasig.cols();n++)
+                        icasig.set(m, n, icasig.get(m,n)*-1);
+                    for(n=0;n<mixing_matrix.rows();n++)
+                        mixing_matrix.set(n, m, mixing_matrix.get(n, m)*-1);
+                }
+                double min_value = icasig.get(m, 0);
+                double max_value = icasig.get(m, 0);
+                for(n=0;n<icasig.cols();n++)
+                {
+                    if(icasig.get(m,n)>max_value)
+                        max_value = icasig.get(m, n);
+                    if(icasig.get(m,n)<min_value)
+                        min_value = icasig.get(m,n);
+                }
+                for(n=0;n<icasig.cols();n++)
+                {
+                    double tmp = icasig.get(m, n);
+                    double t = tmp - min_value;
+                    double b = max_value - min_value;
+                    double f = (t/b)*0.8+.1;
+                    icasig.set(m,n, f);
+                    icasig_no_log.set(m,n, f);
+                    icasig.set(m,n, std::log(icasig.get(m,n)));
+                }
+            }
+
+            for(m=0; m<icasig.rows(); m++)
+            {
+                get_mat_row(icasig, signal, m);
+                arma::mat matsignal(icasig.cols(),1);
+                set_arma_col(matsignal, signal, 0);
+                tensor_param = voxel.matinvg_dg * matsignal;
+
+                unsigned int tensor_index[9] = {0,3,4,3,1,5,4,5,2};
+                for(unsigned int index = 0; index < 9; index++)
+                    tensor[index] = tensor_param(tensor_index[index],0);
+
+                image::matrix::eigen_decomposition_sym(tensor,V,d,image::dim<3,3>());
+                if (d[1] < 0.0)
+                {
+                    d[1] = 0.0;
+                    d[2] = 0.0;
+                }
+                if (d[2] < 0.0)
+                    d[2] = 0.0;
+                if (d[0] < 0.0)
+                {
+                    d[0] = 0.0;
+                    d[1] = 0.0;
+                    d[2] = 0.0;
+                }
+                std::copy(V, V+3, voxel.fib_dir.begin() + m*voxel.dim.size() * 3 + data.voxel_index * 3);
+                eigenvectors[m * 3 + 0] = V[0]; // we need this for BSM
+                eigenvectors[m * 3 + 1] = V[1];
+                eigenvectors[m * 3 + 2] = V[2];
+            }
+
+            icasig = icasig_no_log;
+
+            get_mat_row(mixing_matrix, w, center_voxel);
+            float sum = 0;
+            for(m=0; m<icasig.rows(); m++)
+                sum += abs(w[m]);
+
+            for(m=0; m<icasig.rows(); m++)
+            {
+                fractions[m+1] = abs(w[m])/sum;
+                voxel.fr[m*voxel.dim.size()+data.voxel_index] = fractions[m+1];
+            }
+            icasig.clear();
+            icasig_no_log.clear();
+
+            for(n=0; n<b_count; n++)
+            {
+                x[n] = mixedSig(center_voxel,n);
+                xstar[n] = mixedSig(center_voxel,n);
+                mydata.x[n] = mixedSig(center_voxel,n);
+                weight1[n]= (b_count-6+1)/(x[n]*x[n]);
+                weight2[n]= (b_count-10+1)/(x[n]*x[n]);
+                weight3[n]= (b_count-14+1)/(x[n]*x[n]);
+            }
+
+            switch(ica_num)
+            {
+            case 1: // one stick
+
+                sum=0.0f;
+                for(n=0; n<2; n++)
+                {
+                    if (n==0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
+
+                for(n=0; n<2; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                for(n=0; n<3; n++)
+                {    par[n+2] = eigenvectors[n];
+                     p_min1[n+2] = std::min<float>(par[n+2]*0.9f,par[n+2]*1.1f);
+                     p_max1[n+2] = std::max<float>(par[n+2]*0.9f,par[n+2]*1.1f);
+                }
+
+                par[5] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
+
+                mydata.n = 1; maxIteration = niter*6;
+
+                result = slevmar_blec_dif(&cost_function, par, x, 6, b_count, p_min1, p_max1, A1, B1, 1, weight1, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+6*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
+                {
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[1]);
+                    for(n=0; n<3; n++)
+                        V_best[n]=par[n+2];
+                }
+                break;
+            case 2: // two sticks
+                sum=0.0f;
+                for(n=0; n<3; n++)
+                {
+                    if (n == 0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
+
+                for(n=0; n<3; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                for(n=0; n<6; n++)
+                {    par[n+3] = eigenvectors[n];
+                    p_min3[n+3] = std::min<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                    p_max3[n+3] = std::max<float>(par[n+3]*0.9f,par[n+3]*1.1f);
+                }
+
+                par[9] = lambda  + (((float) rand()/(RAND_MAX))-0.5f)/10;
+
+                mydata.n = 2; maxIteration = niter*10;
+
+                result = slevmar_blec_dif(&cost_function, par, x, 10, b_count, p_min2, p_max2, A2, B1, 1, weight2, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+10*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
+                {
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[1]);
+                    F_best[1] = std::abs<float>(par[2]);
+                    for(n=0; n<6; n++)
+                        V_best[n]=par[n+3];
+                }
+                break;
+            case 3:
+                sum=0.0f;
+                for(n=0; n<4; n++)
+                {
+                    if (n == 0)
+                        par[n] =  ((float) rand()/(RAND_MAX));
+                    else
+                        par[n] =  2.0f + ((float) rand()/(RAND_MAX)); //0.25f; // divide 1 between four isotropic fractions
+                        sum+=par[n];
+                }
+
+                for(n=0; n<4; n++)
+                    par[n] =  par[n]/sum; //0.25f; // divide 1 between four isotropic fractions
+
+                for(n=0; n<9; n++) // copy eigenvectors to par.
+                {    par[n+4] = eigenvectors[n];
+                    p_min3[n+4] = std::min<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                    p_max3[n+4] = std::max<float>(par[n+4]*0.9f,par[n+4]*1.1f);
+                }
+
+                par[13] = lambda + (((float) rand()/(RAND_MAX))-0.5f)/10;
+
+                mydata.n = 3; maxIteration = niter*14;
+
+                result = slevmar_blec_dif(&cost_function, par, x, 14, b_count, p_min3, p_max3, A3, B1, 1, weight3, maxIteration, opts, info, NULL, NULL, (void*)&mydata);
+
+                e[ica_num] = info[1];
+                SC[ica_num] = logf(e[ica_num]/b_count)+14*logf(b_count)/b_count;
+                if(SC_min > SC[ica_num])
+                {
+                    SC_min = SC[ica_num];
+                    min_index = ica_num;
+                    F_best[0] = std::abs<float>(par[1]);
+                    F_best[1] = std::abs<float>(par[2]);
+                    F_best[2] = std::abs<float>(par[3]);
+                    for(n=0; n<9; n++)
+                        V_best[n]=par[n+4];
+                }
+                break;
+            }
+        }
+
+        switch(min_index)
+        {
+         case 1:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            voxel.fr[data.voxel_index] = F_best[0];
+            voxel.fr[voxel.dim.size()+data.voxel_index] = 0;
+            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            break;
+        case 2:
+            V[0] = V[1] = V[2] = 0;
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V, V+3, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            voxel.fr[data.voxel_index] = F_best[0];
+            voxel.fr[voxel.dim.size()+data.voxel_index] = F_best[1];
+            voxel.fr[2*voxel.dim.size()+data.voxel_index] = 0;
+            break;
+        case 3:
+            std::copy(V_best, V_best+3, voxel.fib_dir.begin() + data.voxel_index * 3);
+            std::copy(V_best+3, V_best+6, voxel.fib_dir.begin() + voxel.dim.size() * 3 + data.voxel_index * 3);
+            std::copy(V_best+6, V_best+9, voxel.fib_dir.begin() + 2*voxel.dim.size() * 3 + data.voxel_index * 3);
+            voxel.fr[data.voxel_index] = F_best[0];
+            voxel.fr[voxel.dim.size()+data.voxel_index] = F_best[1];
+            voxel.fr[2*voxel.dim.size()+data.voxel_index] = F_best[2];
+            break;
+        }
+        num_fibers[data.voxel_index] = min_index;
+    }*/
+
+    //delete [] signal;
+    //delete [] space;
+    //delete [] mixedSig;
 }

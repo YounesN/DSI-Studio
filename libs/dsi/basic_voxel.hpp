@@ -76,6 +76,8 @@ public: // used in GPU (device memory)
     float *dev_signalData;
     float *dev_matg_dg;
     float *dev_matinvg_dg;
+    char *dev_mask;
+    float *dev_mixedSig;
 };
 
 class Voxel : public boost::noncopyable
