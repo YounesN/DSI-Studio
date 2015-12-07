@@ -249,7 +249,11 @@ QMAKE_LIBDIR += $$CUDA_DIR/lib/$$SYSTEM_NAME\
 # Add the necessary libraries
 CUDA_LIBS= -lcuda -lcudart
 #add quotation for those directories contain space (Windows required)
-CUDA_INC +=$$join(INCLUDEPATH,'" -I"','-I"','"')
+#CUDA_INC +=$$join(INCLUDEPATH,'" -I"','-I"','"')
+CUDA_INC = -I"C:/cuda/include"\
+           -I"C:/Users/Younes/dsi-studio"\
+           #-I"C:/Users/Younes/dsi-studio/itpp"\
+           -I"C:/Users/Younes/dsi-studio/levmar"
 
 LIBS += $$CUDA_LIBS
 #nvcc config

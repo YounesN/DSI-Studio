@@ -16,6 +16,16 @@
 
 using namespace std;
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess)
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
 extern "C"
 void LaunchICABSMKernel(bool threeDim,
                         int b_count,
@@ -32,8 +42,7 @@ void LaunchICABSMKernel(bool threeDim,
                         float *dev_g_dg,
                         float *dev_invg_dg,
                         float *dev_signalData,
-                        char *dev_mask,
-                        float *dev_mixedSig);
+                        char *dev_mask);
 
 class ICABSMGPU : public BaseProcess
 {
@@ -42,45 +51,32 @@ public:
     virtual void init(Voxel& voxel)
     {
         unsigned int b_count = voxel.bvalues.size() - 1;
-        cudaMalloc((void **) &voxel.gpu.dev_md, voxel.dim.size() * sizeof(float));
-        cudaError_t err = cudaGetLastError();
-        if(err != cudaSuccess)
-            printf("Error: %s\n", cudaGetErrorString(err));
-        cudaMalloc((void **) &voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_num_fibers, voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_fr, voxel.numberOfFibers * voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_fib_dir, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_g_dg, b_count * 6 * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_signalData, b_count * voxel.dim.size() * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_matg_dg, b_count * 6 * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float));
-        cudaMalloc((void **) &voxel.gpu.dev_mask, voxel.dim.size() * sizeof(char));
-        if(voxel.threeDimensionalWindow)
-        {
-            cudaMalloc((void **) &voxel.gpu.dev_mixedSig, 19 * b_count * voxel.dim.size() * sizeof(float));
-            cudaMemset(voxel.gpu.dev_mixedSig, 0, 19 * b_count * voxel.dim.size() * sizeof(float));
-        }
-        else
-        {
-            cudaMalloc((void **) &voxel.gpu.dev_mixedSig, 9 * b_count * voxel.dim.size() * sizeof(float));
-            cudaMemset(voxel.gpu.dev_mixedSig, 0, 9 * b_count * voxel.dim.size() * sizeof(float));
-        }
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_md, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_num_fibers, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_fr, voxel.numberOfFibers * voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_fib_dir, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_g_dg, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_signalData, b_count * voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_matg_dg, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_invg_dg, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMalloc((void **) &voxel.gpu.dev_mask, voxel.dim.size() * sizeof(char)));
 
-        cudaMemset(voxel.gpu.dev_d0, 0, voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_d1, 0, voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_num_fibers, 0, voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_fr, 0, voxel.numberOfFibers * voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_fib_fa, 0, voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_fib_dir, 0, voxel.dim.size() * voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float));
-        cudaMemset(voxel.gpu.dev_g_dg, 0, b_count * 6 * sizeof(float));
-        cudaMemset(voxel.gpu.dev_invg_dg, 0, b_count * 6 * sizeof(float));
-        cudaMemset(voxel.gpu.dev_signalData, 0, b_count * voxel.dim.size() * sizeof(float));
-        cudaMemset(voxel.gpu.dev_matg_dg, 0, b_count * 6 * sizeof(float));
-        cudaMemset(voxel.gpu.dev_invg_dg, 0, b_count * 6 * sizeof(float));
-        cudaMemset(voxel.gpu.dev_mask, 0, voxel.dim.size() * sizeof(char));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_d0, 0, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_d1, 0, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_num_fibers, 0, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_fr, 0, voxel.numberOfFibers * voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_fib_fa, 0, voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_fib_dir, 0, voxel.numberOfFibers * voxel.dim.size() * 3 * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_g_dg, 0, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_invg_dg, 0, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_signalData, 0, b_count * voxel.dim.size() * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_matg_dg, 0, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_invg_dg, 0, b_count * 6 * sizeof(float)));
+        gpuErrchk( cudaMemset(voxel.gpu.dev_mask, 0, voxel.dim.size() * sizeof(char)));
 
         int i,j;
         // copy signal data
@@ -93,18 +89,15 @@ public:
             for(j=0; j<b_count; j++)
                 tmpsignalData[i*b_count+j] = voxel.signalData[i][j];
         }
-        cudaMemcpy(voxel.gpu.dev_signalData, tmpsignalData,
+        gpuErrchk( cudaMemcpy(voxel.gpu.dev_signalData, tmpsignalData,
                    b_count * voxel.dim.w * voxel.dim.h * voxel.dim.d * sizeof(float),
-                   cudaMemcpyHostToDevice);
-        err = cudaGetLastError();
-        if(err != cudaSuccess)
-            printf("Error: %s\n", cudaGetErrorString(err));
+                   cudaMemcpyHostToDevice));
 
         char * tmp_mask = new char[voxel.dim.size()];
         for(i=0; i<voxel.dim.size(); i++)
             tmp_mask[i] = voxel.image_model->mask[i];
-        cudaMemcpy(voxel.gpu.dev_mask, tmp_mask, voxel.dim.size() * sizeof(char),
-                   cudaMemcpyHostToDevice);
+        gpuErrchk( cudaMemcpy(voxel.gpu.dev_mask, tmp_mask, voxel.dim.size() * sizeof(char),
+                   cudaMemcpyHostToDevice));
         // copy g_dg and pseudo inverse of it
         float * tmp_g_dg = new float[b_count * 6];
         float * tmp_invg_dg = new float[b_count * 6];
@@ -141,13 +134,10 @@ public:
                 tmp_invg_dg[j*b_count+i] = voxel.matinvg_dg(j, i);
             }
         }
-        cudaMemcpy(voxel.gpu.dev_g_dg, tmp_g_dg, b_count * 6 * sizeof(float),
-                   cudaMemcpyHostToDevice);
-        cudaMemcpy(voxel.gpu.dev_invg_dg, tmp_invg_dg, b_count * 6 * sizeof(float),
-                   cudaMemcpyHostToDevice);
-        err = cudaGetLastError();
-        if(err != cudaSuccess)
-            printf("Error: %s\n", cudaGetErrorString(err));
+        gpuErrchk( cudaMemcpy(voxel.gpu.dev_g_dg, tmp_g_dg, b_count * 6 * sizeof(float),
+                   cudaMemcpyHostToDevice));
+        gpuErrchk( cudaMemcpy(voxel.gpu.dev_invg_dg, tmp_invg_dg, b_count * 6 * sizeof(float),
+                   cudaMemcpyHostToDevice));
         LaunchICABSMKernel(voxel.threeDimensionalWindow,
                            voxel.bvalues.size()-1,
                            voxel.dim.width(),
@@ -163,8 +153,7 @@ public:
                            voxel.gpu.dev_g_dg,
                            voxel.gpu.dev_invg_dg,
                            voxel.gpu.dev_signalData,
-                           voxel.gpu.dev_mask,
-                           voxel.gpu.dev_mixedSig);
+                           voxel.gpu.dev_mask);
         delete [] tmp_g_dg;
         delete [] tmp_invg_dg;
         delete [] tmp_mask;
@@ -182,11 +171,11 @@ public:
         float *tmp_d0 = new float[voxel.dim.size()];
         float *tmp_d1 = new float[voxel.dim.size()];
         float *tmp_fib_dir = new float[voxel.dim.size() * 3];
-        cudaMemcpy(tmp_fib_fa, voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(tmp_md, voxel.gpu.dev_md, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(tmp_d0, voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(tmp_d1, voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost);
-        cudaMemcpy(tmp_fib_dir, voxel.gpu.dev_fib_dir, voxel.dim.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost);
+        gpuErrchk( cudaMemcpy(tmp_fib_fa, voxel.gpu.dev_fib_fa, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost));
+        gpuErrchk( cudaMemcpy(tmp_md, voxel.gpu.dev_md, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost));
+        gpuErrchk( cudaMemcpy(tmp_d0, voxel.gpu.dev_d0, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost));
+        gpuErrchk( cudaMemcpy(tmp_d1, voxel.gpu.dev_d1, voxel.dim.size() * sizeof(float), cudaMemcpyDeviceToHost));
+        gpuErrchk( cudaMemcpy(tmp_fib_dir, voxel.gpu.dev_fib_dir, voxel.dim.size() * 3 * sizeof(float), cudaMemcpyDeviceToHost));
 
         mat_writer.write("fa0", tmp_fib_fa, 1, voxel.dim.size());
         mat_writer.write("dir0", tmp_fib_dir, 1, voxel.dim.size() * 3);
