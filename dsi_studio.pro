@@ -103,7 +103,8 @@ HEADERS += mainwindow.h \
     libs/dsi/ica_process.hpp \
     libs/dsi/sig_process.hpp \
     libs/dsi/icabsm_process.hpp \
-    libs/dsi/icaidsi_process.hpp
+    libs/dsi/icaidsi_process.hpp \
+    libs/dsi/icabsm_process_gpu.hpp
 
 FORMS += mainwindow.ui \
     tracking/tracking_window.ui \
@@ -169,6 +170,10 @@ SOURCES += main.cpp \
 OTHER_FILES += \
     options.txt
 
+# Boost Library
+
+QMAKE_LIBDIR += $$PWD/stage/lib\
+
 # IT++ library
 win32: LIBS += -L$$PWD/itpp/lib/ -litpp_debug_win32
 
@@ -214,3 +219,7 @@ DEPENDPATH += $$PWD/levmar
 
 win32:!win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/levmar.lib
 else:win32-g++: PRE_TARGETDEPS += $$PWD/levmar/lib/liblevmar.a
+
+# Armadillo library
+
+INCLUDEPATH += $$PWD/armadillo/include
